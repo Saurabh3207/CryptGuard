@@ -121,16 +121,7 @@ const Dash = () => {
                   My Files
                 </Button>
               </div>
-              <div className="pb-2 w-100">
-                <Button
-                  variant="light"
-                  id="2"
-                  onClick={toggleView}
-                  className="w-100 text-info"
-                >
-                  Group Files
-                </Button>
-              </div>
+              
               <div className="pb-2 w-100">
                 <Button
                   variant="light"
@@ -143,13 +134,14 @@ const Dash = () => {
             </div>
           </div>
         </Col>
+        
         <Col md={10} className="bg-light text-dark">
           {view === "1" ? (
             <Files email={add} keys={keys} />
           ) : (
             <GroupFiles email={add} keys={keys} />
           )}
-        </Col>
+        </Col> 
       </Row>
     </Col>
   );

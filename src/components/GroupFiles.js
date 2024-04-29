@@ -3,15 +3,13 @@ import { Header, Icon } from "semantic-ui-react";
 import { Button, Alert } from "react-bootstrap";
 import DeleteModal from "../components/DeleteModal";
 import {
-  addUserFile,
-  getUserFiles,
+  // addUserFile,
+  // getUserFiles,
   deleteFile,
   // downloadFile,
 } from "../api/Calls";
 
-const GroupFiles = ({ email, group, setSelected }) => {
-  // Check if group exists before accessing its properties
-  const groupName = group ? group.name : '';
+const GroupFiles = ({ group, setSelected }) => {
   const maxfilesize = 50;
   const [keys, setKeys] = useState({});
   const [files, setFiles] = useState([]);
@@ -29,22 +27,19 @@ const GroupFiles = ({ email, group, setSelected }) => {
   useEffect(() => {
     updateData();
     // eslint-disable-next-line
-  }, [flag, keys]); 
+  }, [flag]);
 
   const updateData = async () => {
-    try {
-      let userfiles = await getUserFiles(email); // Pass the email parameter
-      if (userfiles) {
-        setFiles(userfiles); // Set fetched files to state
-      }
-      setKeys(keys);
-    } catch (error) {
-      console.error("Error fetching user files:", error);
-    }
+    // let userfiles = await getUserFiles(email);
+    let fileArr = [];
+    // if (userfiles) {
+    //   userfiles.forEach((f) => {
+    //     fileArr.push(f);
+    //   });
+    // }
+    setFiles(fileArr);
+    setKeys(keys);
   };
-  
-  
-
 
   const isDuplicate = (passed) => {
     let flag = false;
@@ -55,24 +50,24 @@ const GroupFiles = ({ email, group, setSelected }) => {
   };
 
   const handleUpload = (e) => {
-  setUploading(true);
-  if (e.target.files.length > 0) {
-    let file = e.target.files[0];
-    if (file.size < maxfilesize * 1024 * 1024) {
-      let dupe = isDuplicate(file.name);
-      console.log(dupe);
-      addUserFile(file, email, keys.public, dupe).then(() => { 
-        setFlag(!flag);
+    setUploading(true);
+    if (e.target.files.length > 0) {
+      let file = e.target.files[0];
+      if (file.size < maxfilesize * 1024 * 1024) {
+        let dupe = isDuplicate(file.name);
+        console.log(dupe);
+        // addUserFile(file, email, keys.public, dupe).then(() => {
+        //   setFlag(!flag);
+        //   setUploading(false);
+        // });
+      } else {
         setUploading(false);
-      });
-    } else {
-      setUploading(false);
-      setTooLarge(true);
-      setTimeout(() => setTooLarge(false), 3000);
+        setTooLarge(true);
+        setTimeout(() => setTooLarge(false), 3000);
+      }
     }
-  }
-  e.target.value = null;
-};
+    e.target.value = null;
+  };
 
   const handleDownload = async (file) => {
     setDownloading(true);
@@ -84,7 +79,6 @@ const GroupFiles = ({ email, group, setSelected }) => {
     setDeleteShow(false);
     deleteFile(file).then(() => setFlag(!flag));
   };
-
 
   const FileButton = ({ file }) => {
     let displayname = file.filename.split("&^%")[1];
@@ -122,6 +116,7 @@ const GroupFiles = ({ email, group, setSelected }) => {
       </div>
     );
   };
+
   return (
     <div className="vh col py-4">
       <DeleteModal

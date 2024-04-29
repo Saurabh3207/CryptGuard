@@ -29,7 +29,7 @@ const Files = ({ email, keys }) => {
   }, [flag, keys]);
 
   const updateData = async () => {
-    let userfiles = await getUserFiles(email); // Updated to pass the email prop
+    let userfiles = await getUserFiles(email);
     let fileArr = [];
     if (userfiles) {
       userfiles.forEach((f) => {
@@ -39,14 +39,13 @@ const Files = ({ email, keys }) => {
     setFiles(fileArr);
   };
 
- const isDuplicate = (passed) => {
-  let flag = false;
-  files.forEach((f) => {
-    if (f.filename === email + "&^%" + passed) flag = f;
-  });
-  return flag;
-};
-
+  const isDuplicate = (passed) => {
+    let flag = false;
+    files.forEach((f) => {
+      if (f.filename === email + "&^%" + passed) flag = f;
+    });
+    return flag;
+  };
 
   const handleUpload = (e) => {
     setUploading(true);
@@ -54,7 +53,7 @@ const Files = ({ email, keys }) => {
       let file = e.target.files[0];
       if (file.size < maxfilesize * 1024 * 1024) {
         let dupe = isDuplicate(file.name);
-        addUserFile(file, email, keys.public, dupe).then(() => { // Updated to include dupe parameter
+        addUserFile(file, email, keys.public, dupe).then(() => {
           setFlag(!flag);
           setUploading(false);
         });
@@ -66,7 +65,6 @@ const Files = ({ email, keys }) => {
     }
     e.target.value = null;
   };
-  
 
   const handleDownload = async (file) => {
     setDownloading(true);
@@ -83,7 +81,7 @@ const Files = ({ email, keys }) => {
     return (
       <div className="py-1 d-flex align-items-center">
         <div className="overflow-hidden mr-3 text-truncate">{displayname}</div>
-        <div className="ml-auto">;;;;;;;;;;;;;
+        <div className="ml-auto">
           <Button variant="outline-info" onClick={() => handleDownload(file)}>
             Download
           </Button>

@@ -11,25 +11,22 @@ const Group = ({ email, keys, setView }) => {
   const [groupName, setName] = useState("");
   const [password, setPassword] = useState("");
   const [selected, setSelected] = useState("");
+
   useEffect(() => {
     updateData();
     // eslint-disable-next-line
   }, [flag]);
-  
+
   const updateData = async () => {
-    try {
-      let usergroups = await getUsersGroups(email);
-      let grouparr = [];
-      if (usergroups) {
-        usergroups.forEach((g) => {
-          grouparr.push(g);
-        });
-      }
-      // console.log(grouparr);
-      setGroups(grouparr);
-    } catch (error) {
-      console.error("Error fetching user groups:", error);
+    let usergroups = await getUsersGroups(email);
+    let grouparr = [];
+    if (usergroups) {
+      usergroups.forEach((g) => {
+        grouparr.push(g);
+      });
     }
+    // console.log(grouparr);
+    setGroups(grouparr);
   };
 
   const handleSelect = (group) => {
