@@ -23,7 +23,7 @@ const getIssuerPublicKey = () => {
       });
   });
 };
-// returns issuer private key for cert verif
+// returns issuer private key for cert verify
 const getIssuerPrivateKey = () => {
   return new Promise((resolve) => {
     issuer
