@@ -1,14 +1,14 @@
-import { useContext, useState, useEffect } from "react";
-import { UserContext } from "../providers/UserProvider";
-import { Row, Col, Button } from "react-bootstrap";
+import React, { useContext, useState, useEffect } from "react";
+import { Col, Row, Button } from "react-bootstrap";
 import { Image, Icon } from "semantic-ui-react";
+import { UserContext } from "../providers/UserProvider";
+import Team from "../components/team";
+import LogoutModal from "../components/LogoutModal";
+import PasswordModal from "../components/PasswordModal";
+import NewPasswordModal from "../components/NewPassword";
+import Files from "../components/Files";
 import { isUser, getUser } from "../api/Calls";
 import { decryptPrivateKey } from "../api/Crypto";
-import Files from "../components/Files";
-import GroupFiles from "../components/GroupFiles";
-import NewPasswordModal from "../components/NewPassword";
-import PasswordModal from "../components/PasswordModal";
-import LogoutModal from "../components/LogoutModal";
 
 const Dash = () => {
   const user = useContext(UserContext);
@@ -23,11 +23,9 @@ const Dash = () => {
   const [passwordModalShow, setPasswordShow] = useState(false);
   const [newPasswordShow, setNewPasswordShow] = useState(false);
   const [view, setView] = useState("1");
-  const toggleView = (e) => setView(e.target.id);
 
   useEffect(() => {
     updateData();
-    // eslint-disable-next-line
   }, [user, password, flag, view]);
 
   const updateData = async () => {
@@ -39,7 +37,7 @@ const Dash = () => {
     if (userinfo) {
       if (password !== null) {
         getPassword().then(async () => {
-          let userinfo = await getUser(email, password);
+          userinfo = await getUser(email, password);
           let decpair = await decryptPrivate(userinfo.keys);
           setKeys(decpair);
         });
@@ -77,6 +75,19 @@ const Dash = () => {
     });
   };
 
+  const handleLogout = () => {
+    setLogoutShow(true);
+  };
+
+  const toggleView = (e) => {
+    const id = e.target.id;
+    if (id === "1" || id === "2") {
+      setView(id);
+    } else {
+      // Handle other views if needed
+    }
+  };
+
   return (
     <Col className="h-100">
       <LogoutModal
@@ -101,8 +112,9 @@ const Dash = () => {
             <div className="pt-4 pb-2 text-center">
               <h2>
                 <Icon name="cloud" className="mr-3" />
-                Secure Store
+                CryptGuard
               </h2>
+              <h4>Your Personal Secure Cloud.</h4>
             </div>
           </div>
           <div className="grow py-4 d-flex flex-column justify-content-start align-items-center">
@@ -121,12 +133,21 @@ const Dash = () => {
                   My Files
                 </Button>
               </div>
-              
+              <div className="pb-2 w-100">
+                <Button
+                  variant="light"
+                  id="2"
+                  onClick={toggleView}
+                  className="w-100 text-info"
+                >
+                  Developer Team
+                </Button>
+              </div>
               <div className="pb-2 w-100">
                 <Button
                   variant="light"
                   className="w-100 text-info"
-                  onClick={() => setLogoutShow(true)}
+                  onClick={handleLogout}
                 >
                   Sign Out
                 </Button>
@@ -134,14 +155,13 @@ const Dash = () => {
             </div>
           </div>
         </Col>
-        
         <Col md={10} className="bg-light text-dark">
           {view === "1" ? (
             <Files email={add} keys={keys} />
           ) : (
-            <GroupFiles email={add} keys={keys} />
+            <Team onNavigate={toggleView} />
           )}
-        </Col> 
+        </Col>
       </Row>
     </Col>
   );
