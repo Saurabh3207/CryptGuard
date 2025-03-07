@@ -5,12 +5,77 @@ import { FaShieldAlt, FaBolt, FaUserSecret, FaGlobe } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useWeb3Context } from "../contexts/useWeb3Context";
 import { connectWallet } from "../utils/connectWallet";
+import { Toaster, toast } from "react-hot-toast";
 
 const ConnectWallet = () => {
-  const web3State = useWeb3Context();
+  const { account, setAccount } = useWeb3Context();
+
+  const handleConnect = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      toast.error("MetaMask is not installed. Please install MetaMask to connect your wallet.", {
+        style: {
+          border: '1px solid #FF0000',
+          padding: '8px 16px',
+          color: '#FF0000',
+          fontSize: '14px',
+        },
+        iconTheme: {
+          primary: '#FF0000',
+          secondary: '#FFFAEE',
+        },
+      });
+      return;
+    }
+
+    try {
+      const walletAddress = await connectWallet();
+      if (walletAddress) {
+        setAccount(walletAddress);
+        toast.success("Successfully connected to MetaMask.", {
+          style: {
+            border: '1px solid #00FF00',
+            padding: '8px 16px',
+            color: '#00FF00',
+            fontSize: '14px',
+          },
+          iconTheme: {
+            primary: '#00FF00',
+            secondary: '#FFFAEE',
+          },
+        });
+      } else {
+        toast.error("Failed to connect to MetaMask.", {
+          style: {
+            border: '1px solid #FF0000',
+            padding: '8px 16px',
+            color: '#FF0000',
+            fontSize: '14px',
+          },
+          iconTheme: {
+            primary: '#FF0000',
+            secondary: '#FFFAEE',
+          },
+        });
+      }
+    } catch (error) {
+      toast.error("An error occurred while connecting to MetaMask.", {
+        style: {
+          border: '1px solid #FF0000',
+          padding: '8px 16px',
+          color: '#FF0000',
+          fontSize: '14px',
+        },
+        iconTheme: {
+          primary: '#FF0000',
+          secondary: '#FFFAEE',
+        },
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-black text-white relative overflow-hidden">
+      <Toaster position="top-right" reverseOrder={false} />
       {/* Animated Background Circles */}
       <div className="absolute inset-0 flex justify-center items-center">
         <div className="w-96 h-96 bg-blue-500 opacity-20 rounded-full blur-3xl animate-ping"></div>
@@ -30,25 +95,16 @@ const ConnectWallet = () => {
         <p className="mb-4 text-lg">Connect your MetaMask wallet to get started</p>
         <motion.div whileHover={{ scale: 1.1 }}>
           <Button
-            onClick={connectWallet}
+            onClick={handleConnect}
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-purple-600 hover:to-blue-600 text-white py-3 px-8 rounded-full text-xl shadow-lg transition-transform"
           >
-            Connect with MetaMask
+            {account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : "Connect with MetaMask"}
           </Button>
         </motion.div>
         <p className="mt-4 text-yellow-400">🦊 MetaMask Required: Install MetaMask to securely connect your wallet.</p>
         <a href="https://metamask.io/download.html" className="text-blue-400 underline mt-1 inline-block text-lg">
           Don’t have MetaMask? Install Now
         </a>
-        {web3State.selectedAccount && (
-          <div className="bg-gray-900/50 backdrop-blur-sm rounded-lg p-4 border border-gray-800 mt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Connected Wallet</span>
-              <span className="text-sm text-emerald-400">Connected</span>
-            </div>
-            <div className="mt-2 font-mono text-sm break-all">{web3State.selectedAccount}</div>
-          </div>
-        )}
         <p className="text-sm text-gray-400 mt-3">
           By connecting, you agree to our <a href="#" className="underline">Terms of Service</a> and <a href="#" className="underline">Privacy Policy</a>
         </p>
@@ -59,25 +115,29 @@ const ConnectWallet = () => {
           icon: <FaShieldAlt className="text-blue-400 text-5xl" />,
           title: "Enhanced Security",
           description: "Military-grade encryption protecting your files with blockchain technology",
-          color: "blue"
+          color: "blue",
+          glowClass: "glow-blue"
         }, {
           icon: <FaBolt className="text-purple-400 text-5xl" />,
           title: "Fast Access",
           description: "Lightning-fast file access and sharing with decentralized storage",
-          color: "purple"
+          color: "purple",
+          glowClass: "glow-purple"
         }, {
           icon: <FaUserSecret className="text-indigo-400 text-5xl" />,
           title: "Privacy First",
           description: "Your data remains private and encrypted end-to-end",
-          color: "indigo"
+          color: "indigo",
+          glowClass: "glow-indigo"
         }, {
           icon: <FaGlobe className="text-green-400 text-5xl" />,
           title: "24/7 Availability",
           description: "Access your files anytime, anywhere with guaranteed uptime",
-          color: "green"
+          color: "green",
+          glowClass: "glow-green"
         }].map((feature, idx) => (
-          <Card key={idx} className={`bg-gray-800 border border-${feature.color}-500 text-white shadow-xl transform hover:scale-105 transition-transform rounded-2xl`}>
-            <CardContent className="flex items-center p-6 space-x-5">
+          <Card key={idx} className={`border-4 ${feature.glowClass}`}>
+            <CardContent className="flex items-center space-x-5">
               {feature.icon}
               <div>
                 <h3 className="text-2xl font-bold mb-1">{feature.title}</h3>
