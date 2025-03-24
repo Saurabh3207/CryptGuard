@@ -1,4 +1,5 @@
 const ethers = require("ethers");
+const UserModel = require("../models/User");
 
 async function authController(req, res, next) {
   try {
@@ -19,6 +20,17 @@ async function authController(req, res, next) {
 
     // Compare the recovered address with the address sent from frontend
     if (address.toLowerCase() === recoveredAddress.toLowerCase()) {
+      const address = recoveredAddress.toLowerCase();
+      const user = await UserModel.findOne({ userAddress: address });
+
+      if (!user) {
+        const userData = await UserModel.create({ userAddress: address });
+        console.log("User Created: ", userData);
+      } else {
+        user.lastLogin = new Date();
+        await user.save();
+      }
+
       return res.status(200).json({ message: "Authentication Successful" });
     } else {
       return res.status(401).json({ message: "Authentication Failed" });
