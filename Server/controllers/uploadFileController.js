@@ -27,6 +27,7 @@ async function uploadFileController(req, res, next) {
     console.log(encryptedData);
     // Upload the encrypted file to IPFS
     
+    
     res.status(200).json({ message: "File uploaded successfully" });
     
   } catch (error) {
