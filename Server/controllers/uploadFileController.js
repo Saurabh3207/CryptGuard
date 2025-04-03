@@ -22,6 +22,8 @@ async function uploadFileController(req, res, next) {
     // For testing, replace with dynamic address
     const address = "0x75D1a8b4f0a3761B5D199e36C32a948EeA5A87d4"; 
     const userAddress = address.toLowerCase();
+
+    
     const user = await UserModel.findOne({ userAddress: userAddress });
 
     if (!user) {
