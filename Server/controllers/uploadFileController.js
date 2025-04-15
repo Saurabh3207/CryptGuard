@@ -6,17 +6,18 @@ const { encryptFile } = require("../utils/encryption");
 const stream = require("stream");
 const axios = require("axios");
 const FormData = require("form-data");
+const FileMapping = require("../models/FileMapping"); 
 
 async function uploadFileController(req, res, next) {
   try {
-    const { address } = req.body;
+    const { address, fileHash } = req.body;
+
 
     if (!address || !req.file) {
       return res.status(400).json({ message: "Missing address or file" });
     }
 
     console.log("Uploaded File Object:", req.file);
-
 
     const userAddress = address.toLowerCase();
     let user = await UserModel.findOne({ userAddress });
@@ -68,10 +69,9 @@ async function uploadFileController(req, res, next) {
       originalFileName: req.file.originalname,
     };
 
-    // ✅ Use Buffer (not stream) for metadata upload
     const metadataBuffer = Buffer.from(JSON.stringify(metadata));
 
-    // 📛 Generate a clean timestamped filename
+    //  Create unique metadata file name
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
     const timePart = now.toTimeString().slice(0, 5).replace(":", "");
@@ -96,12 +96,24 @@ async function uploadFileController(req, res, next) {
 
     const metadataCID = metaRes.data.IpfsHash;
 
-    // ✅ Send both CIDs to frontend
+    // Save mapping to MongoDB
+    await FileMapping.create({
+      userAddress,
+      ipfsCID: encryptedFileCID,
+      metadataCID,
+      fileName: req.file.originalname,
+      uploadTime: new Date(),
+      fileHash: fileHash,
+
+    });
+
+    //  Send both CIDs to frontend
     res.status(200).json({
       message: "Encrypted file & metadata uploaded successfully",
       encryptedFileCID,
       metadataCID,
     });
+
   } catch (error) {
     console.error("Upload Error:", error.message);
     res.status(500).json({ message: "Internal server error" });
