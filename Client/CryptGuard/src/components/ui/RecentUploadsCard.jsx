@@ -84,7 +84,8 @@ const RecentUploadsCard = () => {
           </div>
         ) : (
           <ul className="space-y-3">
-            {files.map((file, index) => {
+            {/* Slice only 3 files */}
+            {files.slice(0, 3).map((file, index) => {
               const icon = iconMap[file.type] || iconMap.default;
               return (
                 <li

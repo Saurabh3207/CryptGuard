@@ -45,24 +45,29 @@ const UploadFile = () => {
       formData.append("address", selectedAccount);
       formData.append("fileHash", fileHash);
 
-      // Simulated progress animation
-      const simulate = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(simulate);
-            return prev;
-          }
-          return prev + 10;
-        });
-      }, 150);
-
-      const res = await axios.post("http://localhost:3000/api/uploadFile", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await axios.post(
+        "http://localhost:3000/api/uploadFile",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            setProgress(percent);
+          },
+        }
+      );
 
       const { encryptedFileCID, metadataCID } = res.data;
+
+      // 👇 show toast while waiting for blockchain
+      toast.loading("Waiting for Metamask confirmation...", { id: "metamask" });
+
       const tx = await contractInstance.uploadFile(encryptedFileCID, fileHash);
       await tx.wait();
+
+      toast.dismiss("metamask"); // remove the loading toast
 
       setProgress(100);
       toast.success("✅ File uploaded & recorded on blockchain!");
@@ -79,6 +84,12 @@ const UploadFile = () => {
     } finally {
       setUploading(false);
       setTimeout(() => setProgress(0), 2000);
+      // 👇 CLEAR FILE AND PREVIEW AFTER upload
+      setFile(null);
+      setPreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""; // Clear input file field
+      }
     }
   };
 
@@ -132,12 +143,14 @@ const UploadFile = () => {
         className="hidden"
         accept="*"
       />
-  
+
       {/* Upload UI */}
       <div className="text-center text-white space-y-3 px-4 py-6">
         <div className="flex flex-col items-center justify-center gap-1">
           <i className="fas fa-cloud-upload-alt text-4xl group-hover:scale-110 transition-transform duration-300" />
-          <p className="text-base sm:text-lg font-medium">Drag and drop your file here</p>
+          <p className="text-base sm:text-lg font-medium">
+            Drag and drop your file here
+          </p>
           <span className="text-sm text-indigo-200">or</span>
           <button
             onClick={() => fileInputRef.current.click()}
@@ -146,7 +159,7 @@ const UploadFile = () => {
             Browse Files
           </button>
         </div>
-  
+
         {/* File Preview */}
         {preview && (
           <div className="mt-4">
@@ -158,7 +171,7 @@ const UploadFile = () => {
             />
           </div>
         )}
-  
+
         {/* Upload Progress */}
         {uploading && (
           <div className="w-full mt-4">
@@ -174,7 +187,6 @@ const UploadFile = () => {
       </div>
     </div>
   );
-  
 };
 
 export default UploadFile;

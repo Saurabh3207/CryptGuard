@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FaWallet, FaCheckCircle, FaTimesCircle, FaRegCopy } from "react-icons/fa";
+import { toast } from "react-hot-toast";
 
 const WalletStatusCard = ({ selectedAccount }) => {
   const isConnected = !!selectedAccount;
@@ -12,12 +13,19 @@ const WalletStatusCard = ({ selectedAccount }) => {
     if (selectedAccount) {
       navigator.clipboard.writeText(selectedAccount);
       setCopied(true);
+      toast.success("Address copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   return (
-    <div className="h-full bg-gradient-to-r from-teal-400 to-green-500 text-white rounded-xl p-6 shadow-lg relative overflow-hidden flex flex-col gap-4 justify-between">
+    <div
+      className={`h-full ${
+        isConnected
+          ? "bg-gradient-to-r from-teal-400 to-green-500"
+          : "bg-gradient-to-r from-red-400 to-pink-500"
+      } text-white rounded-xl p-6 shadow-lg relative overflow-hidden flex flex-col gap-4 justify-between transition-all duration-500`}
+    >
       {/* Top-right label */}
       <span className="absolute top-4 right-4 text-xs font-medium text-white/80">
         Wallet Status
@@ -58,7 +66,9 @@ const WalletStatusCard = ({ selectedAccount }) => {
             >
               <FaRegCopy />
             </button>
-            {copied && <span className="text-green-100 text-[10px]">Copied!</span>}
+            {copied && (
+              <span className="text-green-100 text-[10px] font-bold">Copied!</span>
+            )}
           </div>
         )}
       </div>
