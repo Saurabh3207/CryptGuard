@@ -7,6 +7,8 @@ import {
   FaDownload,
 } from "react-icons/fa";
 import { useEffect, useState } from "react";
+import { useWeb3Context } from "../../contexts/useWeb3Context";
+import axios from "axios";
 
 const iconMap = {
   pdf: <FaFilePdf className="text-red-500 text-lg" />,
@@ -17,20 +19,50 @@ const iconMap = {
 };
 
 const RecentUploadsCard = () => {
+  const { web3State } = useWeb3Context();
+  const { selectedAccount } = web3State;
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState([]);
 
-  // Simulate fetching data
   useEffect(() => {
-    setTimeout(() => {
-      setFiles([
-        { name: "contract.pdf", type: "pdf", size: "1.2MB", time: "2 mins ago" },
-        { name: "profile.png", type: "image", size: "800KB", time: "5 mins ago" },
-        { name: "song.mp3", type: "audio", size: "3.4MB", time: "10 mins ago" },
-      ]);
-      setLoading(false);
-    }, 1500);
-  }, []);
+    const fetchFiles = async () => {
+      if (!selectedAccount) return;
+      try {
+        const res = await axios.get(
+          `http://localhost:3000/api/files/user/${selectedAccount}`
+        );
+        const fetchedFiles = res.data.files.map((file) => {
+          let type = "default";
+
+          if (file.fileName?.toLowerCase().endsWith(".pdf")) {
+            type = "pdf";
+          } else if (file.fileName?.match(/\.(jpg|jpeg|png|gif)$/i)) {
+            type = "image";
+          } else if (file.fileName?.match(/\.(mp3|wav|ogg)$/i)) {
+            type = "audio";
+          } else if (file.fileName?.match(/\.(txt|doc|docx)$/i)) {
+            type = "text";
+          }
+
+          return {
+            name: file.fileName,
+            size: file.fileSize
+              ? (file.fileSize / (1024 * 1024)).toFixed(2) + " MB"
+              : "Unknown",
+            time: new Date(file.uploadTime).toLocaleString(),
+            type: type,
+          };
+        });
+
+        setFiles(fetchedFiles);
+      } catch (error) {
+        console.error("Error fetching recent uploads:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFiles();
+  }, [selectedAccount]);
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-5 border border-gray-100 h-full flex flex-col justify-between">

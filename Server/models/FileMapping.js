@@ -10,6 +10,8 @@ const FileMappingSchema = new mongoose.Schema({
   fileName: { type: String },
   uploadTime: { type: Date, default: Date.now },
   fileHash: { type: String }, 
+  fileSize: { type: Number },
+  fileType: { type: String },
 });
 
 module.exports = mongoose.model("FileMapping", FileMappingSchema);

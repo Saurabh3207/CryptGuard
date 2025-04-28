@@ -104,7 +104,8 @@ async function uploadFileController(req, res, next) {
       fileName: req.file.originalname,
       uploadTime: new Date(),
       fileHash: fileHash,
-
+      fileSize: req.file.size,
+      fileType: req.file.mimetype,
     });
 
     //  Send both CIDs to frontend
