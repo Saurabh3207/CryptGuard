@@ -1,5 +1,7 @@
 const ethers = require("ethers");
 const UserModel = require("../models/User");
+const jwt = require("jsonwebtoken");
+const { JWT_SECRETKEY } = require("../config/serverConfig");
 
 async function authController(req, res, next) {
   try {
@@ -30,8 +32,17 @@ async function authController(req, res, next) {
         user.lastLogin = new Date();
         await user.save();
       }
-
-      return res.status(200).json({ message: "Authentication Successful" });
+      const token = jwt.sign(
+        {
+          address,
+        },
+        JWT_SECRETKEY,
+        { expiresIn: "1h" }
+      );
+      console.log("Generated Token: ", token);
+      return res
+        .status(200)
+        .json({ message: "Authentication Successful", token });
     } else {
       return res.status(401).json({ message: "Authentication Failed" });
     }
