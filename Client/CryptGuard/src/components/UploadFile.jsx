@@ -35,10 +35,15 @@ const UploadFile = () => {
       return;
     }
 
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in to upload a file.");
+      return;
+    }
+
     try {
       setUploading(true);
       setProgress(0);
-
       const fileHash = await getFileHash(selectedFile);
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -49,7 +54,10 @@ const UploadFile = () => {
         "http://localhost:3000/api/uploadFile",
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: { 
+            "x-access-token": token,
+            "Content-Type": "multipart/form-data" 
+          },
           onUploadProgress: (progressEvent) => {
             const percent = Math.round(
               (progressEvent.loaded * 100) / progressEvent.total
@@ -62,7 +70,7 @@ const UploadFile = () => {
       const { encryptedFileCID, metadataCID } = res.data;
 
       // 👇 show toast while waiting for blockchain
-      toast.loading("Waiting for Metamask confirmation...", { id: "metamask" });
+      toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
 
       const tx = await contractInstance.uploadFile(encryptedFileCID, fileHash);
       await tx.wait();
@@ -72,29 +80,20 @@ const UploadFile = () => {
       setProgress(100);
       toast.success("✅ File uploaded & recorded on blockchain!");
 
-      console.log("Encrypted File CID:", encryptedFileCID);
-      console.log("Metadata CID:", metadataCID);
     } catch (error) {
       console.error("Upload failed:", error);
-      toast.error(
-        error?.message?.includes("File already exists")
-          ? "⚠️ This file was already uploaded."
-          : "❌ Upload failed. Please try again."
-      );
+      toast.error(error?.message?.includes("File already exists")
+        ? "⚠️ This file was already uploaded."
+        : "❌ Upload failed. Please try again.");
     } finally {
       setUploading(false);
-      setTimeout(() => setProgress(0), 2000);
-      // 👇 CLEAR FILE AND PREVIEW AFTER upload
-      setFile(null);
-      setPreview(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""; // Clear input file field
-      }
+      resetForm();
     }
   };
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
+
     setFile(selectedFile);
     if (selectedFile?.type?.startsWith("image")) {
       const reader = new FileReader();
@@ -119,6 +118,14 @@ const UploadFile = () => {
       setPreview(null);
     }
     handleUploadStart(droppedFile);
+  };
+
+  const resetForm = () => {
+    setFile(null);
+    setPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   return (
@@ -148,9 +155,7 @@ const UploadFile = () => {
       <div className="text-center text-white space-y-3 px-4 py-6">
         <div className="flex flex-col items-center justify-center gap-1">
           <i className="fas fa-cloud-upload-alt text-4xl group-hover:scale-110 transition-transform duration-300" />
-          <p className="text-base sm:text-lg font-medium">
-            Drag and drop your file here
-          </p>
+          <p className="text-base sm:text-lg font-medium">Drag and drop your file here</p>
           <span className="text-sm text-indigo-200">or</span>
           <button
             onClick={() => fileInputRef.current.click()}

@@ -34,7 +34,11 @@ export const connectWallet = async () => {
 
     const url = `http://localhost:3000/api/authentication?address=${selectedAccount}`;
     const res = await axios.post(url, dataSignature);
-    console.log("Response: ", res.data);
+    console.log("Response: ", res.data.token);
+
+    const token = res.data.token;
+    localStorage.setItem("token", token);
+    localStorage.setItem("address", selectedAccount);
 
     // Define your contract address and the contract ABI
     const contractAddress = "0xfa211F6fdD59A1f920823E64271329D5848D3903";

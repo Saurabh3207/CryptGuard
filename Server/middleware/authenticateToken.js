@@ -1,19 +1,20 @@
-const jwt = require('jsonwebtoken');
-const { JWT_SECRETKEY } = require('../config/serverConfig');
+const jwt = require("jsonwebtoken");
 
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
 
-  if (!token) {
-    return res.status(401).json({ message: 'Access denied. No token provided.' });
-  }
-
-  jwt.verify(token, JWT_SECRETKEY, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid token' });
-    req.user = user;
+async function authenticateToken(req, res, next) {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRETKEY);
+    console.log("Decoded Token:", decoded);  
+    req.address = decoded.address;
     next();
-  });
+  } catch (error) {
+    console.error("JWT Authentication Error:", error);
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: "Token expired. Please log in again." });
+    }
+    return res.status(401).json({ message: "Authentication failed" });
+  }
+  
 }
 
-module.exports = authenticateToken;
+module.exports = { authenticateToken };
