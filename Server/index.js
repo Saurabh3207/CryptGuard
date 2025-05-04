@@ -6,12 +6,14 @@ const {connectDB} = require('./db/connect');
 const authenticationRoute = require('./routes/authenticationRoute');
 const uploadFileRoute = require('./routes/uploadFileRoute');
 const fileRoute = require('./routes/fileRoute');
+const decryptRoute = require('./routes/decryptRoute');
 
 app.use(cors());
 app.use(express.json());
 app.use('/api',authenticationRoute);
 app.use('/api',uploadFileRoute);
 app.use('/api', fileRoute);
+app.use('/api', decryptRoute);
 
 async function serverStart (){
     try {

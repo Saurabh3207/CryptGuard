@@ -17,9 +17,10 @@ async function uploadFileController(req, res, next) {
       console.error("Missing address or file in the request body.");
       return res.status(400).json({ message: "Missing address or file" });
     }
-
-    console.log("Received File Object:", req.file); // Log the file object for debugging
-
+    
+    //log the file object for debugging
+    //console.log("Received File Object:", req.file); 
+    
     const userAddress = address.toLowerCase();
     let user = await UserModel.findOne({ userAddress });
 
@@ -128,9 +129,10 @@ async function uploadFileController(req, res, next) {
     }
 
     // Send both CIDs to frontend
-    res.status(200).json({
+
+     res.status(200).json({
       message: "Encrypted file & metadata uploaded successfully",
-      encryptedFileCID,
+      ipfsCID: encryptedFileCID,
       metadataCID,
     });
   } catch (error) {

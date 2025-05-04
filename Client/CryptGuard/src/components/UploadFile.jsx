@@ -14,7 +14,6 @@ const UploadFile = () => {
   const { web3State } = useWeb3Context();
   const { selectedAccount, contractInstance } = web3State;
 
-  // Hash file in browser using SHA-256
   const getFileHash = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
@@ -54,9 +53,9 @@ const UploadFile = () => {
         "http://localhost:3000/api/uploadFile",
         formData,
         {
-          headers: { 
-            "x-access-token": token,
-            "Content-Type": "multipart/form-data" 
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
           },
           onUploadProgress: (progressEvent) => {
             const percent = Math.round(
@@ -67,24 +66,40 @@ const UploadFile = () => {
         }
       );
 
-      const { encryptedFileCID, metadataCID } = res.data;
+      const { ipfsCID, metadataCID } = res.data;
 
-      // 👇 show toast while waiting for blockchain
+      // 🧾 Blockchain transaction
       toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
 
-      const tx = await contractInstance.uploadFile(encryptedFileCID, fileHash);
-      await tx.wait();
+      try {
+        const tx = await contractInstance.uploadFile(ipfsCID, fileHash);
+        await tx.wait();
 
-      toast.dismiss("metamask"); // remove the loading toast
+        toast.dismiss("metamask");
+        setProgress(100);
+        toast.success("File uploaded & recorded on blockchain! ✅");
+      } catch (txError) {
+        toast.dismiss("metamask");
 
-      setProgress(100);
-      toast.success("✅ File uploaded & recorded on blockchain!");
+        if (
+          txError.code === 4001 || // MetaMask rejection
+          txError.message?.toLowerCase().includes("user denied")
+        ) {
+          toast.error("❌ Transaction rejected in MetaMask.");
+        } else {
+          console.error("Blockchain TX error:", txError);
+          toast.error("❌ Failed to record on blockchain.");
+        }
+        return;
+      }
 
     } catch (error) {
       console.error("Upload failed:", error);
-      toast.error(error?.message?.includes("File already exists")
-        ? "⚠️ This file was already uploaded."
-        : "❌ Upload failed. Please try again.");
+      toast.error(
+        error?.message?.includes("File already exists")
+          ? "⚠️ This file was already uploaded."
+          : "❌ Upload failed. Please try again."
+      );
     } finally {
       setUploading(false);
       resetForm();
@@ -93,8 +108,8 @@ const UploadFile = () => {
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-
     setFile(selectedFile);
+
     if (selectedFile?.type?.startsWith("image")) {
       const reader = new FileReader();
       reader.onload = () => setPreview(reader.result);
@@ -102,6 +117,7 @@ const UploadFile = () => {
     } else {
       setPreview(null);
     }
+
     handleUploadStart(selectedFile);
   };
 
@@ -110,6 +126,7 @@ const UploadFile = () => {
     setDragOver(false);
     const droppedFile = e.dataTransfer.files[0];
     setFile(droppedFile);
+
     if (droppedFile?.type?.startsWith("image")) {
       const reader = new FileReader();
       reader.onload = () => setPreview(reader.result);
@@ -117,6 +134,7 @@ const UploadFile = () => {
     } else {
       setPreview(null);
     }
+
     handleUploadStart(droppedFile);
   };
 
@@ -151,7 +169,6 @@ const UploadFile = () => {
         accept="*"
       />
 
-      {/* Upload UI */}
       <div className="text-center text-white space-y-3 px-4 py-6">
         <div className="flex flex-col items-center justify-center gap-1">
           <i className="fas fa-cloud-upload-alt text-4xl group-hover:scale-110 transition-transform duration-300" />
@@ -165,7 +182,6 @@ const UploadFile = () => {
           </button>
         </div>
 
-        {/* File Preview */}
         {preview && (
           <div className="mt-4">
             <p className="text-sm text-indigo-200 mb-1">Preview:</p>
@@ -177,7 +193,6 @@ const UploadFile = () => {
           </div>
         )}
 
-        {/* Upload Progress */}
         {uploading && (
           <div className="w-full mt-4">
             <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">

@@ -16,7 +16,8 @@ const decryptData = (encryptedData, iv, encryptionKey) => {
         const decryptedData = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
         return decryptedData;
     } catch (error) {
-        console.log(error)
+        console.error("Decryption Error:", error);
+        throw error; 
     }
  
 };
