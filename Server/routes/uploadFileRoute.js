@@ -1,10 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const {uploadFileController} = require('../controllers/uploadFileController');
-const {uploadUserFile} = require('../middleware/multer');
-const {authenticateToken} = require('../middleware/authenticateToken');
+const { authenticateToken } = require('../middleware/authenticateToken');
+const { uploadUserFile } = require('../middleware/multer');
 
-// Protect the route with authentication and multer file upload middleware
-router.post('/uploadFile', authenticateToken, uploadUserFile, uploadFileController);
+const { preUploadFileController } = require('../controllers/preUploadFileController');
+const { confirmUploadController } = require('../controllers/confirmUploadController');
+
+// Step 1: Encrypt file & upload to IPFS 
+router.post('/preUpload', authenticateToken, uploadUserFile, preUploadFileController);
+
+// Step 2: After blockchain confirmation, save to MongoDB
+router.post('/confirmUpload', authenticateToken, confirmUploadController);
 
 module.exports = router;

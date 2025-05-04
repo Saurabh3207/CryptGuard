@@ -43,14 +43,16 @@ const UploadFile = () => {
     try {
       setUploading(true);
       setProgress(0);
+
       const fileHash = await getFileHash(selectedFile);
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("address", selectedAccount);
       formData.append("fileHash", fileHash);
 
-      const res = await axios.post(
-        "http://localhost:3000/api/uploadFile",
+      // Step 1: Upload file to IPFS and get CIDs
+      const preRes = await axios.post(
+        "http://localhost:3000/api/preUpload",
         formData,
         {
           headers: {
@@ -66,25 +68,41 @@ const UploadFile = () => {
         }
       );
 
-      const { ipfsCID, metadataCID } = res.data;
+      const { ipfsCID, metadataCID } = preRes.data;
 
-      // 🧾 Blockchain transaction
+      // Step 2: Send to blockchain
       toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
-
       try {
         const tx = await contractInstance.uploadFile(ipfsCID, fileHash);
         await tx.wait();
-
         toast.dismiss("metamask");
+        toast.success("✅ File recorded on blockchain");
+
+        // Step 3: Save metadata to DB
+        await axios.post(
+          "http://localhost:3000/api/confirmUpload",
+          {
+            address: selectedAccount,
+            ipfsCID,
+            metadataCID,
+            fileHash,
+            fileName: selectedFile.name,
+            fileSize: selectedFile.size,
+            fileType: selectedFile.type,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        toast.success("✅ Upload completed successfully!");
         setProgress(100);
-        toast.success("File uploaded & recorded on blockchain! ✅");
       } catch (txError) {
         toast.dismiss("metamask");
 
-        if (
-          txError.code === 4001 || // MetaMask rejection
-          txError.message?.toLowerCase().includes("user denied")
-        ) {
+        if (txError.code === 4001 || txError.message?.toLowerCase().includes("user denied")) {
           toast.error("❌ Transaction rejected in MetaMask.");
         } else {
           console.error("Blockchain TX error:", txError);
@@ -95,11 +113,7 @@ const UploadFile = () => {
 
     } catch (error) {
       console.error("Upload failed:", error);
-      toast.error(
-        error?.message?.includes("File already exists")
-          ? "⚠️ This file was already uploaded."
-          : "❌ Upload failed. Please try again."
-      );
+      toast.error("❌ Upload failed. Please try again.");
     } finally {
       setUploading(false);
       resetForm();
