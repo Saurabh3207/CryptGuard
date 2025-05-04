@@ -17,7 +17,7 @@ const GATEWAY_URL = "https://orange-urban-quelea-906.mypinata.cloud/ipfs/";
 
 const Vault = () => {
   const { web3State } = useWeb3Context();
-  const { selectedAccount } = web3State;
+  const { selectedAccount, contractInstance } = web3State;
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,79 +55,81 @@ const Vault = () => {
     return "0x" + hash;
   };
 
-  const handleDownload = async (file) => {
+  const findFileIndexFromContract = async (fileHash) => {
     try {
-      toast.loading("Verifying file integrity...");
-      let response;
-      try {
-        response = await axios.get(`https://orange-urban-quelea-906.mypinata.cloud/ipfs/${file.encryptedFileCID}`, {
-          responseType: "blob",
-          timeout: 15000,
-        });
-        
-      } catch (ipfsError) {
-        toast.dismiss();
-        console.error("IPFS Fetch Error:", ipfsError);
-        toast.error(
-          "❌ Failed to fetch file from IPFS. Please try again later."
-        );
-        return;
-      }
-
-      const fileBlob = response.data;
-      const calculatedHash = await calculateFileHash(fileBlob);
-
-      toast.dismiss();
-      if (calculatedHash.toLowerCase() === file.fileHash.toLowerCase()) {
-        toast.success("✅ Integrity Verified! Download starting...");
-        setTimeout(() => {
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(fileBlob);
-          link.download = file.fileName || "CryptGuard_File";
-          link.click();
-        }, 4000);
-      } else {
-        setSelectedFile({ blob: fileBlob, name: file.fileName });
-        setModalOpen(true);
-      }
-    } catch (error) {
-      toast.dismiss();
-      console.error("Download error:", error);
-      toast.error("❌ Failed to download the file.");
+      const filesOnChain = await contractInstance.viewFiles(); // ✅ fixed
+      const index = filesOnChain.findIndex(
+        (f) => f.fileHash.toLowerCase() === fileHash.toLowerCase()
+      );
+      return index !== -1 ? index : null;
+    } catch (err) {
+      console.error("Error fetching from contract:", err);
+      return null;
     }
   };
+  
 
-  const verifyIntegrityOnly = async (file) => {
+  const handleSecureDownload = async (file) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in again.");
+      return;
+    }
+
+    toast.loading("🔐 Decrypting file...");
+
     try {
-      toast.loading("Verifying file integrity...");
-      let response;
-      try {
-        response = await axios.get(`${GATEWAY_URL}${file.encryptedFileCID}`, {
+      const res = await axios.post(
+        "http://localhost:3000/api/decryptAndDownload",
+        {
+          encryptedCID: file.ipfsCID, // aligned with contract
+          metadataCID: file.metadataCID,
+          fileName: file.fileName,
+        },
+        {
           responseType: "blob",
-          timeout: 15000,
-        });
-      } catch (ipfsError) {
-        toast.dismiss();
-        console.error("IPFS Fetch Error:", ipfsError);
-        toast.error(
-          "❌ Failed to fetch file from IPFS. Please try again later."
-        );
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      toast.dismiss();
+      const decryptedBlob = res.data;
+
+      toast.loading("🛡️ Verifying file integrity...");
+
+      const calculatedHash = await calculateFileHash(decryptedBlob);
+
+      if (!contractInstance) {
+        toast.error("Smart contract not connected.");
         return;
       }
 
-      const fileBlob = response.data;
-      const calculatedHash = await calculateFileHash(fileBlob);
-
-      toast.dismiss();
-      if (calculatedHash.toLowerCase() === file.fileHash.toLowerCase()) {
-        toast.success("✅ File Integrity Verified Successfully!");
-      } else {
-        toast.error("❌ Integrity Verification Failed!");
+      const index = await findFileIndexFromContract(file.fileHash);
+      if (index === null) {
+        toast.error("❌ Could not find file index on-chain.");
+        return;
       }
-    } catch (error) {
+
+      const isValid = await contractInstance.verifyFile(index, calculatedHash);
       toast.dismiss();
-      console.error("Verification error:", error);
-      toast.error("❌ Error verifying file.");
+
+      if (!isValid) {
+        toast.error("❌ File integrity check failed!");
+        return;
+      }
+
+      toast.success("✅ Verified! Downloading...");
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(decryptedBlob);
+      link.download = file.fileName || "CryptGuard_File";
+      link.click();
+    } catch (err) {
+      toast.dismiss();
+      console.error("Secure download error:", err);
+      toast.error("❌ Secure download failed.");
     }
   };
 
@@ -206,8 +208,7 @@ const Vault = () => {
               <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
                 {file.fileName?.match(/\.(jpg|jpeg|png|gif)$/i) && (
                   <a
-                  href={`https://orange-urban-quelea-906.mypinata.cloud/ipfs/${file.encryptedFileCID}`}
-
+                    href={`${GATEWAY_URL}${file.ipfsCID}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-center text-xs sm:text-sm font-medium text-violet-600 bg-violet-100 hover:bg-violet-200 rounded-lg px-3 py-1.5 transition"
@@ -216,13 +217,7 @@ const Vault = () => {
                   </a>
                 )}
                 <button
-                  onClick={() => verifyIntegrityOnly(file)}
-                  className="text-xs sm:text-sm font-medium text-blue-600 bg-blue-100 hover:bg-blue-200 rounded-lg px-3 py-1.5 transition"
-                >
-                  🛡️ Verify
-                </button>
-                <button
-                  onClick={() => handleDownload(file)}
+                  onClick={() => handleSecureDownload(file)}
                   className="text-xs sm:text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 rounded-lg px-3 py-1.5 transition"
                 >
                   <FaDownload className="inline mr-1" /> Download
