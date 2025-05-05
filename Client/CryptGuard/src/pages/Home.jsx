@@ -44,13 +44,8 @@ const Home = () => {
 
   const navItems = [
     { label: "Dashboard", icon: <MdDashboard />, href: "/home" },
-<<<<<<< HEAD
     { label: "My Vault", icon: <FaLock />, href: "/home/vault" }, 
 
-=======
-    { label: "My Vault", icon: <FaLock />, href: "/home/vault" }, // Updated vault path
-    { label: "Settings", icon: <MdSettings />, href: "/settings" },
->>>>>>> ab864108e4a337ede4b50680b5faf62594f2fcb1
   ];
 
   return (
@@ -97,11 +92,7 @@ const Home = () => {
 
         <div className="p-4 border-t border-white/10">
           <Link
-<<<<<<< HEAD
             to="/home/support"
-=======
-            to="/support"
->>>>>>> ab864108e4a337ede4b50680b5faf62594f2fcb1
             className="flex items-center text-sm text-gray-400 hover:text-white transition-colors"
           >
             <FaQuestionCircle className="mr-2" />
