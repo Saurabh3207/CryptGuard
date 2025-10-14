@@ -5,12 +5,12 @@ const { JWT_SECRETKEY } = require("../config/serverConfig");
 
 async function authController(req, res, next) {
   try {
-    const { signature } = req.body;
-    const { address } = req.query;
+  const { signature } = req.body;
+  const { address } = req.query;
 
     if (!signature) {
       return res.status(400).json({ message: "Signature is required" });
-    }
+  }
 
     // The message signed by the user
     const message =
@@ -25,20 +25,20 @@ async function authController(req, res, next) {
       const address = recoveredAddress.toLowerCase();
       const user = await UserModel.findOne({ userAddress: address });
 
-      if (!user) {
+    if (!user) {
         const userData = await UserModel.create({ userAddress: address });
         console.log("User Created: ", userData);
       } else {
         user.lastLogin = new Date();
         await user.save();
       }
-      const token = jwt.sign(
-        {
+    const token = jwt.sign(
+      {
           address,
-        },
-        JWT_SECRETKEY,
+      },
+      JWT_SECRETKEY,
         { expiresIn: "1h" }
-      );
+    );
       console.log("Generated Token: ", token);
       return res
         .status(200)
@@ -49,6 +49,7 @@ async function authController(req, res, next) {
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Internal Server Error" });
+
   }
 }
 

@@ -14,7 +14,14 @@ const Wallet = () => {
   const navigateTo = useNavigate();
   const { updateWeb3State, web3State } = useWeb3Context();
   const { selectedAccount } = web3State;
-  const [loading, setLoading] = useState(false); 
+  const [loading, setLoading] = useState(false);
+  const [metaMaskInstalled, setMetaMaskInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check MetaMask installation on mount
+    const isMetaMask = typeof window !== 'undefined' && window.ethereum && window.ethereum.isMetaMask;
+    setMetaMaskInstalled(isMetaMask);
+  }, []);
 
   useEffect(() => {
     if (selectedAccount) {
@@ -23,8 +30,20 @@ const Wallet = () => {
   }, [selectedAccount, navigateTo]);
 
   const handleWalletConnection = async () => {
-    if (loading) return; // prevent spam
+    console.log("🔘 Connect button clicked!");
+    
+    if (loading) {
+      console.log("⏳ Already connecting, ignoring click");
+      return;
+    }
+    
+    if (!metaMaskInstalled) {
+      toast.error("❌ Please install MetaMask first");
+      return;
+    }
+    
     setLoading(true);
+    console.log("🚀 Starting wallet connection...");
 
     try {
       const { contractInstance, selectedAccount } = await connectWallet();
@@ -64,16 +83,30 @@ const Wallet = () => {
         <motion.div whileHover={{ scale: 1.1 }}>
           <Button
             onClick={handleWalletConnection}
-            disabled={loading}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-purple-600 hover:to-blue-600 text-white py-3 px-8 rounded-full text-xl shadow-lg transition-transform"
+            disabled={loading || !metaMaskInstalled}
+            className={`py-3 px-8 rounded-full text-xl shadow-lg transition-transform ${
+              metaMaskInstalled 
+                ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-purple-600 hover:to-blue-600 text-white"
+                : "bg-gray-600 text-gray-300 cursor-not-allowed"
+            }`}
           >
             {loading
               ? "Connecting..."
               : selectedAccount
               ? `Connected: ${selectedAccount.slice(0, 6)}...${selectedAccount.slice(-4)}`
-              : "Connect with MetaMask"}
+              : metaMaskInstalled
+              ? "Connect with MetaMask"
+              : "Install MetaMask First"}
           </Button>
         </motion.div>
+
+        <div className="mt-4">
+          {metaMaskInstalled ? (
+            <p className="text-green-400">✅ MetaMask detected and ready</p>
+          ) : (
+            <p className="text-red-400">❌ MetaMask not detected</p>
+          )}
+        </div>
 
         <p className="mt-4 text-yellow-400">
           🦊 MetaMask Required: Install MetaMask to securely connect your wallet.
