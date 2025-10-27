@@ -85,6 +85,18 @@ class Logger {
     this.writeToFile('combined.log', formattedMessage);
   }
 
+  // Audit logging for critical operations (file uploads, deletions, authentication)
+  audit(action, meta = {}) {
+    const formattedMessage = this.formatMessage('AUDIT', action, {
+      ...meta,
+      audit: true,
+      timestamp: new Date().toISOString()
+    });
+    console.log('\x1b[95m%s\x1b[0m', formattedMessage); // Bright magenta color
+    this.writeToFile('audit.log', formattedMessage);
+    this.writeToFile('combined.log', formattedMessage);
+  }
+
   // Performance logging
   performance(message, meta = {}) {
     const formattedMessage = this.formatMessage('PERFORMANCE', message, {

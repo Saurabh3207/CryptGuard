@@ -29,8 +29,26 @@ const UploadFile = () => {
       return;
     }
 
+    // File size validation
     if (selectedFile.size > 5 * 1024 * 1024) {
       toast.error("❌ File size exceeds 5MB limit.");
+      return;
+    }
+
+    // File type validation
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain', 'text/csv',
+      'application/zip', 'application/x-zip-compressed',
+      'video/mp4', 'video/webm',
+      'audio/mpeg', 'audio/wav'
+    ];
+
+    if (!allowedTypes.includes(selectedFile.type)) {
+      toast.error("❌ Invalid file type. Please upload a supported file format.");
       return;
     }
 
@@ -70,15 +88,42 @@ const UploadFile = () => {
 
       const { ipfsCID, metadataCID } = preRes.data;
 
-      // Step 2: Send to blockchain
-      toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
+      // Step 2: Send to blockchain with proper gas estimation
+      toast.loading("Preparing blockchain transaction...", { id: "metamask" });
       try {
-        const tx = await contractInstance.uploadFile(ipfsCID, fileHash);
-        await tx.wait();
+        // Estimate gas before sending transaction
+        const gasEstimate = await contractInstance.uploadFile.estimateGas(ipfsCID, fileHash);
+        console.log("⛽ Estimated gas:", gasEstimate.toString());
+        
+        toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
+        
+        // Send transaction with gas limit (add 20% buffer)
+        const tx = await contractInstance.uploadFile(ipfsCID, fileHash, {
+          gasLimit: (gasEstimate * 120n) / 100n // 20% buffer
+        });
+        
+        console.log("📝 Transaction sent:", tx.hash);
+        toast.loading(`Transaction submitted: ${tx.hash.slice(0, 10)}...`, { id: "metamask" });
+        
+        // Wait for confirmation
+        const receipt = await tx.wait(1); // Wait for 1 confirmation
+        
+        console.log("✅ Transaction confirmed:", {
+          blockNumber: receipt.blockNumber,
+          gasUsed: receipt.gasUsed.toString(),
+          status: receipt.status
+        });
+        
         toast.dismiss("metamask");
+        
+        // Check transaction status
+        if (receipt.status === 0) {
+          throw new Error("Transaction failed on blockchain");
+        }
+        
         toast.success("✅ File recorded on blockchain");
 
-        // Step 3: Save metadata to DB
+        // Step 3: Save metadata to DB with blockchain transaction hash
         await axios.post(
           "http://localhost:3000/api/confirmUpload",
           {
@@ -89,6 +134,9 @@ const UploadFile = () => {
             fileName: selectedFile.name,
             fileSize: selectedFile.size,
             fileType: selectedFile.type,
+            blockchainTxHash: receipt.hash, // Use receipt hash
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed.toString()
           },
           {
             headers: {
@@ -102,18 +150,33 @@ const UploadFile = () => {
       } catch (txError) {
         toast.dismiss("metamask");
 
+        // Handle EIP-1193 errors
         if (txError.code === 4001 || txError.message?.toLowerCase().includes("user denied")) {
           toast.error("❌ Transaction rejected in MetaMask.");
+        } else if (txError.code === -32603) {
+          toast.error("❌ Transaction failed: " + (txError.message || "Internal error"));
+        } else if (txError.message?.includes("insufficient funds")) {
+          toast.error("❌ Insufficient funds for gas");
         } else {
           console.error("Blockchain TX error:", txError);
-          toast.error("❌ Failed to record on blockchain.");
+          toast.error("❌ Failed to record on blockchain: " + (txError.reason || txError.message));
         }
         return;
       }
 
     } catch (error) {
       console.error("Upload failed:", error);
-      toast.error("❌ Upload failed. Please try again.");
+      
+      // Handle duplicate file error (409 Conflict)
+      if (error.response && error.response.status === 409) {
+        toast.error("⚠️ This file has already been uploaded. Each file can only be uploaded once.");
+      } else if (error.response && error.response.data && error.response.data.message) {
+        // Show server error message
+        toast.error(`❌ ${error.response.data.message}`);
+      } else {
+        // Generic error
+        toast.error("❌ Upload failed. Please try again.");
+      }
     } finally {
       setUploading(false);
       resetForm();

@@ -14,8 +14,14 @@ const FileStatsCard = () => {
     const fetchStats = async () => {
       if (!selectedAccount) return;
       try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
         const res = await axios.get(
-          `http://localhost:3000/api/files/user/${selectedAccount}`
+          `http://localhost:3000/api/files/user/${selectedAccount}`,
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
         );
 
         const totalFiles = res.data.files.length || 0;

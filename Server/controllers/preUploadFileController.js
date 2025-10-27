@@ -55,6 +55,27 @@ async function preUploadFileController(req, res) {
     );
     const ipfsCID = encryptedFileRes.data.IpfsHash;
 
+    // Verify IPFS pinning status
+    try {
+      const pinStatus = await axios.get(
+        `https://api.pinata.cloud/data/pinList?hashContains=${ipfsCID}`,
+        {
+          headers: {
+            Authorization: `Bearer ${PINATA_JWT}`,
+          },
+        }
+      );
+      
+      if (!pinStatus.data.rows || pinStatus.data.rows.length === 0) {
+        throw new Error('IPFS pinning verification failed');
+      }
+      
+      console.log(`✅ IPFS file pinned successfully: ${ipfsCID}`);
+    } catch (verifyError) {
+      console.error('⚠️ IPFS pinning verification warning:', verifyError.message);
+      // Continue even if verification fails (file is still uploaded)
+    }
+
     const metadata = {
       iv: iv.toString("hex"),
       uploadedBy: userAddress,

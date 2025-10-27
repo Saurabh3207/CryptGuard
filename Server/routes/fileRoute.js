@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { getUserFiles, getFileStats } = require('../controllers/fileController');
+const { validate } = require('../middleware/validation');
 
 // GET recent uploaded files
-router.get('/files/user/:walletAddress', getUserFiles);
+// Validation: walletAddress in params
+router.get('/files/user/:walletAddress', validate('getUserFiles'), getUserFiles);
 
 // GET stats for dashboard
-router.get('/files/stats/:walletAddress', getFileStats);
+// Validation: walletAddress in params
+router.get('/files/stats/:walletAddress', validate('getUserFiles'), getFileStats);
 
 module.exports = router;

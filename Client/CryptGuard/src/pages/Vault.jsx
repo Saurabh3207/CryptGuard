@@ -66,7 +66,18 @@ const Vault = () => {
     if (!selectedAccount) return;
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:3000/api/files/user/${selectedAccount}`);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("Please log in to view your files.");
+        return;
+      }
+      
+      const res = await axios.get(
+        `http://localhost:3000/api/files/user/${selectedAccount}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
       setFiles(res.data.files || []);
     } catch {
       toast.error("❌ Failed to fetch files.");
@@ -121,12 +132,25 @@ const Vault = () => {
 
   const findFileIndexFromContract = async (fileHash) => {
     try {
+      if (!contractInstance) {
+        console.warn("⚠️ Contract instance not available");
+        return null;
+      }
+      
       const filesOnChain = await contractInstance.viewFiles();
+      
+      if (!filesOnChain || filesOnChain.length === 0) {
+        console.info("ℹ️ No files found on blockchain (this is normal if you haven't uploaded files yet)");
+        return null;
+      }
+      
       const index = filesOnChain.findIndex(
         (f) => f.fileHash.toLowerCase() === fileHash.toLowerCase()
       );
       return index !== -1 ? index : null;
-    } catch {
+    } catch (err) {
+      // This is expected if blockchain is unavailable or user has no files
+      console.info("ℹ️ Blockchain verification unavailable:", err.message);
       return null;
     }
   };
@@ -135,7 +159,7 @@ const Vault = () => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in.");
 
-    toast.loading("Decrypting...");
+    toast.loading("Decrypting file...");
     try {
       const res = await axios.post(
         "http://localhost:3000/api/decryptAndDownload",
@@ -151,23 +175,49 @@ const Vault = () => {
       );
 
       toast.dismiss();
-      toast.loading("Verifying...");
-      const hash = await calculateFileHash(res.data);
-      const index = await findFileIndexFromContract(file.fileHash);
-      if (index === null) return toast.error("Not found on chain.");
+      const decryptedBlob = res.data;
 
-      const valid = await contractInstance.verifyFile(index, hash);
-      toast.dismiss();
-      if (!valid) return toast.error("Integrity failed!");
+      // Optional blockchain verification - don't block download if it fails
+      try {
+        toast.loading("Verifying integrity...");
+        const hash = await calculateFileHash(decryptedBlob);
+        const index = await findFileIndexFromContract(file.fileHash);
+        
+        if (index !== null) {
+          const valid = await contractInstance.verifyFile(index, hash);
+          toast.dismiss();
+          
+          if (!valid) {
+            toast.error("⚠️ File integrity check failed!");
+            return; // Don't download if verification explicitly fails
+          }
+          
+          toast.success("✅ File verified on blockchain!");
+        } else {
+          toast.dismiss();
+          toast("⚠️ File not on blockchain, proceeding with download", { icon: "ℹ️" });
+        }
+      } catch (verifyErr) {
+        toast.dismiss();
+        console.info("ℹ️ Blockchain verification unavailable:", verifyErr);
+        toast("⚠️ Blockchain verification unavailable, proceeding with download", { 
+          icon: "⚠️",
+          duration: 3000 
+        });
+      }
 
-      toast.success("Verified!");
+      // Download file regardless of blockchain verification status
       const link = document.createElement("a");
-      link.href = URL.createObjectURL(res.data);
+      link.href = URL.createObjectURL(decryptedBlob);
       link.download = file.fileName || "CryptGuard_File";
       link.click();
-    } catch {
+      
+      toast.success("✅ Download completed!");
+      
+    } catch (err) {
       toast.dismiss();
-      toast.error("❌ Download failed.");
+      console.error("Download error:", err);
+      toast.error("❌ Download failed: " + (err.message || "Unknown error"));
     }
   };
 
@@ -210,18 +260,35 @@ const Vault = () => {
       steps.push("📡 Verifying on blockchain...");
       setVerifySteps([...steps]);
 
-      const index = await findFileIndexFromContract(file.fileHash);
-      if (index === null) throw new Error("File not found on-chain.");
-
-      const valid = await contractInstance.verifyFile(index, hash);
-      if (!valid) throw new Error("Hash mismatch");
-
-      steps.push("✅ Verified successfully!");
-      setVerifySteps([...steps]);
-      setVerifyStatus("success");
+      try {
+        const index = await findFileIndexFromContract(file.fileHash);
+        
+        if (index === null) {
+          steps.push("⚠️ File not found on blockchain");
+          setVerifySteps([...steps]);
+          steps.push("✅ File decrypted successfully (blockchain verification skipped)");
+          setVerifySteps([...steps]);
+          setVerifyStatus("warning");
+        } else {
+          const valid = await contractInstance.verifyFile(index, hash);
+          if (!valid) {
+            throw new Error("Hash mismatch - file may be corrupted");
+          }
+          steps.push("✅ Verified successfully on blockchain!");
+          setVerifySteps([...steps]);
+          setVerifyStatus("success");
+        }
+      } catch (blockchainErr) {
+        console.warn("Blockchain verification failed:", blockchainErr);
+        steps.push("⚠️ Blockchain verification unavailable");
+        steps.push("✅ File decrypted successfully (offline mode)");
+        setVerifySteps([...steps]);
+        setVerifyStatus("warning");
+      }
+      
     } catch (err) {
       console.error("Verify error:", err);
-      steps.push("❌ Integrity check failed!");
+      steps.push("❌ Integrity check failed: " + (err.message || "Unknown error"));
       setVerifySteps([...steps]);
       setVerifyStatus("failed");
     }

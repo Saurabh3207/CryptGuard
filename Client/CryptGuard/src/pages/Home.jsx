@@ -8,6 +8,7 @@ import DateTimeCard from "../components/ui/DateTimeCard";
 import FileStatsCard from "../components/ui/FileStatsCard";
 import RecentUploadsCard from "../components/ui/RecentUploadsCard";
 import { motion } from "framer-motion";
+import { toast, Toaster } from "react-hot-toast";
 
 import {
   FaWallet,
@@ -25,6 +26,7 @@ const Home = () => {
   
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  const [authChecked, setAuthChecked] = React.useState(false);
 
   React.useEffect(() => {
     const handleResize = () => {
@@ -37,7 +39,90 @@ const Home = () => {
   const shortenAddress = (addr) =>
     addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "";
 
+  // Check authentication - MUST check both token AND selectedAccount
+  React.useEffect(() => {
+    const token = localStorage.getItem("token");
+    const address = localStorage.getItem("address");
+    
+    // If no token in localStorage, redirect immediately
+    if (!token || !address) {
+      console.log("No token or address in localStorage, redirecting to /");
+      navigate("/", { replace: true });
+      return;
+    }
+    
+    // If token exists but selectedAccount is not loaded yet, wait for it
+    // Set a timeout to prevent infinite waiting
+    if (token && address && !selectedAccount) {
+      console.log("Token exists but account not loaded yet, waiting...");
+      
+      // Timeout after 3 seconds - if account still not loaded, allow access anyway
+      const timeout = setTimeout(() => {
+        if (!selectedAccount) {
+          console.log("⚠️ Account not loaded after timeout, allowing access with localStorage data");
+          setAuthChecked(true);
+        }
+      }, 3000);
+      
+      return () => clearTimeout(timeout);
+    }
+    
+    // If token and address exist but don't match selectedAccount, redirect
+    if (selectedAccount && address.toLowerCase() !== selectedAccount.toLowerCase()) {
+      console.log("Address mismatch, redirecting to /");
+      localStorage.removeItem("token");
+      localStorage.removeItem("address");
+      navigate("/", { replace: true });
+      return;
+    }
+    
+    // If we reach here, authentication is valid
+    if (selectedAccount && token && address) {
+      console.log("✅ Authentication verified, account loaded:", selectedAccount);
+      setAuthChecked(true);
+    }
+  }, [selectedAccount, navigate]); // Run when selectedAccount changes
+
+  // Listen for MetaMask account changes
+  React.useEffect(() => {
+    if (!window.ethereum || !selectedAccount) return;
+
+    const handleAccountsChanged = (accounts) => {
+      const storedAddress = localStorage.getItem("address");
+      
+      if (accounts.length === 0) {
+        // User disconnected MetaMask
+        console.log("MetaMask disconnected");
+        localStorage.removeItem("token");
+        localStorage.removeItem("address");
+        updateWeb3State({ selectedAccount: null, contractInstance: null });
+        navigate("/", { replace: true });
+      } else if (storedAddress && accounts[0].toLowerCase() !== storedAddress.toLowerCase()) {
+        // Account switched in MetaMask
+        console.warn("⚠️ MetaMask account changed");
+        toast.error("🔒 Account changed. Please reconnect.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("address");
+        updateWeb3State({ selectedAccount: null, contractInstance: null });
+        navigate("/", { replace: true });
+      }
+    };
+
+    // Listen for account changes
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+
+    return () => {
+      // Cleanup listener
+      if (window.ethereum.removeListener) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      }
+    };
+  }, []); // Run only once to set up listener
+
   const handleSignOut = () => {
+    // Clear all authentication data
+    localStorage.removeItem("token");
+    localStorage.removeItem("address");
     updateWeb3State({ selectedAccount: null, contractInstance: null });
     navigate("/");
   };
@@ -48,8 +133,21 @@ const Home = () => {
 
   ];
 
+  // Show loading screen until authentication is verified
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-black">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <Toaster position="top-right" />
       {/* Sidebar */}
       <aside className={`
         bg-gradient-to-b from-violet-800 to-indigo-900 text-white shadow-xl transition-all duration-300

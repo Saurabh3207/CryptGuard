@@ -15,6 +15,19 @@ const apiClient = axios.create({
   },
 });
 
+// JWT token management
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const onRefreshed = (token) => {
+  refreshSubscribers.map((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (callback) => {
+  refreshSubscribers.push(callback);
+};
+
 // Request interceptor to add authentication token
 apiClient.interceptors.request.use(
   (config) => {
@@ -44,10 +57,38 @@ apiClient.interceptors.response.use(
       const { status, data } = error.response;
       
       if (status === 401) {
-        // Unauthorized - clear token and redirect to login
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return Promise.reject(new Error('Session expired. Please log in again.'));
+        // Unauthorized - handle token expiration
+        const originalRequest = error.config;
+        
+        // Prevent infinite loops
+        if (originalRequest._retry) {
+          localStorage.removeItem('token');
+          window.location.href = '/wallet';
+          return Promise.reject(new Error('Session expired. Please log in again.'));
+        }
+        
+        originalRequest._retry = true;
+        
+        // If not already refreshing, attempt to refresh token
+        if (!isRefreshing) {
+          isRefreshing = true;
+          
+          // For now, just clear and redirect (can implement refresh token later)
+          localStorage.removeItem('token');
+          setTimeout(() => {
+            window.location.href = '/wallet';
+          }, 1000);
+          
+          return Promise.reject(new Error('Session expired. Please reconnect your wallet.'));
+        }
+        
+        // Queue requests while refreshing
+        return new Promise((resolve) => {
+          addRefreshSubscriber((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(apiClient(originalRequest));
+          });
+        });
       }
       
       if (status === 429) {

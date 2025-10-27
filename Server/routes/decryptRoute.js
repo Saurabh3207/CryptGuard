@@ -2,11 +2,14 @@
 const express = require('express');
 const axios = require('axios');
 const { authenticateToken } = require('../middleware/authenticateToken');
+const { validate } = require('../middleware/validation');
 const UserModel = require('../models/User');
 const { decryptData } = require('../utils/decryption');
 const router = express.Router();
 
-router.post('/decryptAndDownload', authenticateToken, async (req, res) => {
+// POST /api/decryptAndDownload - Decrypt and download file
+// Validation: encryptedCID, metadataCID in body
+router.post('/decryptAndDownload', authenticateToken, validate('decryptAndDownload'), async (req, res) => {
   try {
     const { encryptedCID, metadataCID, fileName } = req.body;
     const userAddress = req.address.toLowerCase(); // From JWT

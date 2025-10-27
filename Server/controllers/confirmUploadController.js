@@ -1,8 +1,9 @@
 const FileMapping = require("../models/FileMapping");
+const { logger } = require("../utils/logger");
 
 async function confirmUploadController(req, res) {
   try {
-    const { address, ipfsCID, metadataCID, fileHash, fileName, fileSize, fileType } = req.body;
+    const { address, ipfsCID, metadataCID, fileHash, fileName, fileSize, fileType, blockchainTxHash } = req.body;
 
     // 1. Validate required fields
     if (!address || !ipfsCID || !metadataCID || !fileHash) {
@@ -26,7 +27,21 @@ async function confirmUploadController(req, res) {
       fileName,
       fileSize,
       fileType,
+      blockchainTxHash: blockchainTxHash || null,
+      verified: !!blockchainTxHash, // Mark as verified if blockchain tx hash provided
       uploadTime: new Date(),
+    });
+
+    // Audit log for file upload
+    logger.audit('FILE_UPLOAD', {
+      userAddress,
+      fileName,
+      fileSize,
+      fileType,
+      ipfsCID,
+      fileHash,
+      blockchainTxHash: blockchainTxHash || 'N/A',
+      timestamp: new Date().toISOString()
     });
 
     // 4. Send back success + saved metadata

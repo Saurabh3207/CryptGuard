@@ -55,8 +55,14 @@ const FileCategoriesCard = () => {
     const fetchCategories = async () => {
       if (!selectedAccount) return;
       try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
         const res = await axios.get(
-          `http://localhost:3000/api/files/stats/${selectedAccount}`
+          `http://localhost:3000/api/files/stats/${selectedAccount}`,
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
         );
         const fetchedCounts = res.data.categories;
 

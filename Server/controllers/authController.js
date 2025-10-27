@@ -2,6 +2,7 @@ const ethers = require("ethers");
 const UserModel = require("../models/User");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRETKEY } = require("../config/serverConfig");
+const { logger } = require("../utils/logger");
 
 async function authController(req, res, next) {
   try {
@@ -17,7 +18,8 @@ async function authController(req, res, next) {
       "Welcome to CryptGuard! Please sign this message to authenticate your account";
 
     // Recover the address from the signature
-    const recoveredAddress = ethers.utils.verifyMessage(message, signature);
+    // UPDATED: ethers v6 syntax (removed .utils)
+    const recoveredAddress = ethers.verifyMessage(message, signature);
     console.log("Recovered Address: ", recoveredAddress);
 
     // Compare the recovered address with the address sent from frontend
@@ -26,11 +28,25 @@ async function authController(req, res, next) {
       const user = await UserModel.findOne({ userAddress: address });
 
     if (!user) {
-        const userData = await UserModel.create({ userAddress: address });
+        const userData = await UserModel.create({ userAddress: address, loginCount: 1 });
         console.log("User Created: ", userData);
+        
+        // Audit log for new user registration
+        logger.audit('USER_REGISTRATION', {
+          userAddress: address,
+          timestamp: new Date().toISOString()
+        });
       } else {
         user.lastLogin = new Date();
+        user.loginCount = (user.loginCount || 0) + 1;
         await user.save();
+        
+        // Audit log for user login
+        logger.audit('USER_LOGIN', {
+          userAddress: address,
+          loginCount: user.loginCount,
+          timestamp: new Date().toISOString()
+        });
       }
     const token = jwt.sign(
       {
@@ -40,16 +56,39 @@ async function authController(req, res, next) {
         { expiresIn: "1h" }
     );
       console.log("Generated Token: ", token);
+      
+      // Security log for successful authentication
+      logger.security('Authentication successful', {
+        userAddress: address,
+        timestamp: new Date().toISOString()
+      });
+      
       return res
         .status(200)
         .json({ message: "Authentication Successful", token });
     } else {
+      // Security log for failed authentication
+      logger.security('Authentication failed - address mismatch', {
+        providedAddress: address,
+        recoveredAddress: recoveredAddress,
+        timestamp: new Date().toISOString()
+      });
+      
       return res.status(401).json({ message: "Authentication Failed" });
     }
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ message: "Internal Server Error" });
-
+    // Enhanced error handling with specific error types
+    console.error("Authentication error:", error);
+    
+    if (error.code === 'INVALID_ARGUMENT') {
+      return res.status(400).json({ message: "Invalid signature format" });
+    }
+    
+    if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+      return res.status(503).json({ message: "Database temporarily unavailable" });
+    }
+    
+    return res.status(500).json({ message: "Authentication failed. Please try again." });
   }
 }
 
