@@ -1,25 +1,50 @@
-
 const express = require('express');
 const app = express();
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { sanitizeInputs, validateContentType, validateBodySize } = require('./middleware/validation');
-const { MONGODB_URL, PORT, CORS_ORIGIN } = require('./config/serverConfig');
+const { enhancedSecurityHeaders, preventReplayAttack } = require('./middleware/securityMiddleware');
+const config = require('./config/serverConfig');
+const { MONGODB_URL, PORT } = config;
 const { connectDB } = require('./db/connect');
 const authenticationRoute = require('./routes/authenticationRoute');
 const uploadFileRoute = require('./routes/uploadFileRoute');
 const fileRoute = require('./routes/fileRoute');
 const decryptRoute = require('./routes/decryptRoute');
+const refreshTokenRoute = require('./routes/refreshTokenRoute');
+const logoutRoute = require('./routes/logoutRoute');
 
-// Security headers
-app.use(helmet());
+// Security headers (helmet provides basic protection)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// Enhanced custom security headers
+app.use(enhancedSecurityHeaders);
 
 // Restrict CORS to trusted origin (set CORS_ORIGIN in .env)
-const allowedOrigin = CORS_ORIGIN || 'http://localhost:5173';
+const allowedOrigin = config.CORS_ORIGIN;
 app.use(cors({
     origin: allowedOrigin,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Request-Timestamp', 
+                     'X-Request-Nonce', 'X-Content-Checksum', 'X-Request-Signature'],
+    exposedHeaders: ['X-Response-Checksum']
 }));
 
 // Body size validation (before parsing)
@@ -27,6 +52,9 @@ app.use(validateBodySize);
 
 // Parse JSON with size limit
 app.use(express.json({ limit: '10mb' }));
+
+// Parse cookies (for HttpOnly token support)
+app.use(cookieParser());
 
 // Global input sanitization (prevents NoSQL injection)
 app.use(sanitizeInputs);
@@ -76,11 +104,23 @@ const authLimiter = rateLimit({
 app.use('/api', apiLimiter); // Apply to all API routes
 app.use('/api/authentication', authLimiter); // Extra strict for auth
 
+// Apply replay attack prevention conditionally (based on ENABLE_REPLAY_PROTECTION flag)
+// When disabled, middleware is a no-op and passes through
+app.use('/api', preventReplayAttack);
+
 // Routes
 app.use('/api', authenticationRoute);
+app.use('/api', refreshTokenRoute);  // Token refresh endpoint
+app.use('/api', logoutRoute);        // Logout endpoint
 app.use('/api', uploadFileRoute);
 app.use('/api', fileRoute);
 app.use('/api', decryptRoute);
+
+// Log security configuration on startup
+console.log('🔒 Security Configuration:');
+console.log('  - Replay Protection:', config.ENABLE_REPLAY_PROTECTION ? '✅ ENABLED' : '⚠️  DISABLED');
+console.log('  - Request Signing:', config.ENABLE_REQUEST_SIGNING ? '✅ ENABLED' : '⚠️  DISABLED');
+console.log('  - Content Integrity:', config.ENABLE_CONTENT_INTEGRITY ? '✅ ENABLED' : '⚠️  DISABLED');
 
 async function serverStart() {
     try {

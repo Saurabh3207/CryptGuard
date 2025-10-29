@@ -1,22 +1,36 @@
-// utils/connectWallet.js
+/**
+ * Wallet Connection Utility
+ * Handles MetaMask wallet connection and authentication
+ */
+
 import { ethers } from "ethers";
 import contractAbi from "../constants/contractAbi.json";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import logger from "./logger";
 
-let isConnecting = false; // Prevents multiple MetaMask requests
+let isConnecting = false;
 
-// Utility: wrap a promise with a timeout to avoid indefinite hang
+/**
+ * Wraps a promise with a timeout to prevent indefinite waiting
+ * @param {Promise} promise - The promise to wrap
+ * @param {number} ms - Timeout in milliseconds
+ * @param {string} timeoutMessage - Error message on timeout
+ * @returns {Promise}
+ */
 const withTimeout = (promise, ms, timeoutMessage = "Request timed out") =>
   Promise.race([
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
   ]);
 
-// Function to show account selection modal (unchanged)
+/**
+ * Displays account selection modal when multiple accounts are available
+ * @param {string[]} accounts - Array of account addresses
+ * @returns {Promise<string>} Selected account address
+ */
 const showAccountSelectionModal = (accounts) => {
   return new Promise((resolve) => {
-    // Create modal overlay
     const overlay = document.createElement("div");
     overlay.style.cssText = `
       position: fixed;
@@ -32,7 +46,6 @@ const showAccountSelectionModal = (accounts) => {
       backdrop-filter: blur(4px);
     `;
 
-    // Create modal container
     const modal = document.createElement("div");
     modal.style.cssText = `
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -44,7 +57,6 @@ const showAccountSelectionModal = (accounts) => {
       animation: slideIn 0.3s ease-out;
     `;
 
-    // Create title
     const title = document.createElement("h2");
     title.textContent = "🦊 Choose Your Account";
     title.style.cssText = `
@@ -81,30 +93,41 @@ const showAccountSelectionModal = (accounts) => {
         gap: 12px;
       `;
 
-      accountBtn.innerHTML = `
-        <div style="
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: bold;
-          font-size: 18px;
-        ">
-          ${index + 1}
-        </div>
-        <div style="flex: 1;">
-          <div style="font-weight: bold; color: #333; margin-bottom: 4px;">
-            Account ${index + 1}
-          </div>
-          <div style="font-family: monospace; color: #666; font-size: 14px;">
-            ${account.slice(0, 6)}...${account.slice(-4)}
-          </div>
-        </div>
+      // Create avatar circle
+      const avatar = document.createElement('div');
+      avatar.style.cssText = `
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 18px;
       `;
+      avatar.textContent = String(index + 1);
+
+      // Create account info container
+      const infoContainer = document.createElement('div');
+      infoContainer.style.cssText = 'flex: 1;';
+
+      // Create account label
+      const accountLabel = document.createElement('div');
+      accountLabel.style.cssText = 'font-weight: bold; color: #333; margin-bottom: 4px;';
+      accountLabel.textContent = `Account ${index + 1}`;
+
+      // Create account address (truncated)
+      const accountAddress = document.createElement('div');
+      accountAddress.style.cssText = 'font-family: monospace; color: #666; font-size: 14px;';
+      accountAddress.textContent = `${account.slice(0, 6)}...${account.slice(-4)}`;
+
+      // Assemble the button
+      infoContainer.appendChild(accountLabel);
+      infoContainer.appendChild(accountAddress);
+      accountBtn.appendChild(avatar);
+      accountBtn.appendChild(infoContainer);
 
       accountBtn.onmouseover = () => {
         accountBtn.style.transform = "scale(1.02)";
@@ -178,117 +201,112 @@ const showAccountSelectionModal = (accounts) => {
     `;
     document.head.appendChild(style);
 
-    // Add to DOM
     document.body.appendChild(overlay);
   });
 };
 
+/**
+ * Connects to MetaMask wallet and authenticates user
+ * @returns {Promise<{contractInstance: ethers.Contract, selectedAccount: string}>}
+ */
 export const connectWallet = async () => {
   if (isConnecting) {
-    console.log("⏳ Connection already in progress");
+    logger.debug("Connection already in progress");
     toast("⏳ Already connecting to MetaMask...");
     return { contractInstance: null, selectedAccount: null };
   }
 
   isConnecting = true;
-  console.log("🚀 ========== STARTING METAMASK CONNECTION ==========");
+  logger.debug("Starting MetaMask connection");
 
   try {
-    // Step 1: Check if MetaMask is installed
+    // Verify MetaMask installation
     if (!window.ethereum || !window.ethereum.isMetaMask) {
-      console.error("❌ MetaMask not found");
-      // Throw so caller handles UI
+      logger.error("MetaMask not found");
       throw new Error("MetaMask not found. Please install MetaMask.");
     }
-    console.log("✅ MetaMask detected");
+    logger.debug("MetaMask detected");
 
-    // Step 2: Check if unlocked using STANDARD method first (avoids experimental API warning)
+    // Check if MetaMask is unlocked
     let isUnlocked = true;
     try {
-      // Use standard eth_accounts first (no warnings)
       const accounts = await window.ethereum.request({ method: "eth_accounts" });
       isUnlocked = Array.isArray(accounts) && accounts.length > 0;
-      console.log(`🔍 MetaMask unlock status (via eth_accounts): ${isUnlocked ? "UNLOCKED ✅" : "LOCKED 🔒"}`);
+      logger.debug(`MetaMask unlock status: ${isUnlocked ? "UNLOCKED" : "LOCKED"}`);
     } catch (err) {
-      console.warn("⚠️ Could not check MetaMask lock status via eth_accounts:", err);
+      logger.warn("Could not check MetaMask lock status:", err);
       
-      // Fallback: try experimental API only if standard method fails
+      // Fallback to experimental API
       try {
         if (window.ethereum._metamask && typeof window.ethereum._metamask.isUnlocked === "function") {
           isUnlocked = await window.ethereum._metamask.isUnlocked();
-          console.log(`🔍 MetaMask unlock status (via _metamask): ${isUnlocked ? "UNLOCKED ✅" : "LOCKED 🔒"}`);
         }
       } catch (err2) {
-        console.warn("⚠️ Fallback check also failed:", err2);
-        isUnlocked = true; // assume unlocked and let eth_requestAccounts handle it
+        logger.warn("Fallback check failed:", err2);
+        isUnlocked = true;
       }
     }
 
     if (!isUnlocked) {
-      console.log("🔒 MetaMask is locked - aborting connection");
-      // Throw and let caller show toast (so UI updates are coordinated)
+      logger.debug("MetaMask is locked");
       throw new Error("MetaMask is locked");
     }
 
-    console.log("✅ MetaMask is unlocked - proceeding with connection");
+    logger.debug("MetaMask is unlocked - proceeding");
 
-    // Step 3: Request accounts from MetaMask with a timeout
-    console.log("📋 Requesting accounts from MetaMask (with timeout)...");
+    // Request accounts from MetaMask
+    logger.debug("Requesting accounts from MetaMask");
     toast.loading("Opening MetaMask...", { id: "metamask-connecting" });
 
     let accounts;
     try {
-      // Short timeout so app doesn't hang if MetaMask silently refuses to open a popup
       accounts = await withTimeout(
         window.ethereum.request({ method: "eth_requestAccounts" }),
         15000,
         "Connecting to MetaMask timed out. Please check your MetaMask extension."
       );
       toast.dismiss("metamask-connecting");
-      console.log(`✅ Received ${accounts.length} account(s):`, accounts);
+      logger.debug(`Received ${accounts.length} account(s)`);
     } catch (error) {
       toast.dismiss("metamask-connecting");
-      console.error("❌ Error requesting accounts:", error);
+      logger.error("Error requesting accounts:", error);
       if (error?.code === 4001) {
-        // User explicitly rejected
         throw new Error("User rejected connection request");
       } else if (error?.code === -32002) {
         throw new Error("Request already pending. Please check your MetaMask popups.");
       } else {
-        // Propagate generic message
         throw error;
       }
     }
 
     if (!accounts || accounts.length === 0) {
-      console.error("❌ No accounts found");
+      logger.error("No accounts found");
       throw new Error("No accounts found. Please unlock MetaMask.");
     }
 
-    // Step 4: Account selection (if multiple)
+    // Handle account selection for multiple accounts
     let selectedAccount;
     if (accounts.length > 1) {
-      console.log("🔀 Multiple accounts detected, showing selection modal...");
+      logger.debug("Multiple accounts detected, showing selection modal");
       toast("🔀 Multiple accounts found! Please choose one.", {
         icon: "👆",
         duration: 3000
       });
       selectedAccount = await showAccountSelectionModal(accounts);
       if (!selectedAccount) {
-        console.log("❌ User cancelled account selection");
+        logger.debug("User cancelled account selection");
         throw new Error("Account selection cancelled");
       }
     } else {
       selectedAccount = accounts[0];
     }
 
-    console.log("🎯 Selected account:", selectedAccount);
+    logger.debug("Selected account:", selectedAccount);
 
-    // Step 5: Create provider and signer
-    console.log("🔗 Creating provider and signer...");
+    logger.debug("Creating provider and signer");
     const provider = new ethers.BrowserProvider(window.ethereum);
     const network = await provider.getNetwork();
-    console.log("🌐 Connected to network:", network.name, `(chainId: ${network.chainId})`);
+    logger.debug("Connected to network:", network.name, `(chainId: ${network.chainId})`);
 
     const signer = await provider.getSigner(selectedAccount);
     const signerAddress = await signer.getAddress();
@@ -296,10 +314,10 @@ export const connectWallet = async () => {
     if (signerAddress.toLowerCase() !== selectedAccount.toLowerCase()) {
       throw new Error("Signer address mismatch");
     }
-    console.log("✅ Signer created for:", signerAddress);
+    logger.debug("Signer created for:", signerAddress);
 
-    // Step 6: Request signature for authentication (with timeout)
-    console.log("✍️ Requesting signature...");
+    // Request signature for authentication
+    logger.debug("Requesting signature");
     toast("📝 Please sign the message in MetaMask", { duration: 10000, icon: "🦊" });
 
     const message = "Welcome to CryptGuard! Please sign this message to authenticate your account";
@@ -311,9 +329,9 @@ export const connectWallet = async () => {
           setTimeout(() => reject(new Error("Signature request timed out. Please check for MetaMask popup.")), 120000)
         ),
       ]);
-      console.log("✅ Signature received");
+      logger.debug("Signature received");
     } catch (err) {
-      console.error("❌ Signature error:", err);
+      logger.error("Signature error:", err);
       if (err?.code === 4001 || err?.message?.toLowerCase().includes("cancel")) {
         throw new Error("You cancelled the signature request");
       } else {
@@ -321,40 +339,38 @@ export const connectWallet = async () => {
       }
     }
 
-    // Step 7: Authenticate with backend
-    console.log("🔐 Authenticating with backend...");
+    // Authenticate with backend
+    logger.debug("Authenticating with backend");
     let res;
     try {
       res = await axios.post(
         `http://localhost:3000/api/authentication?address=${selectedAccount}`,
-        { signature }
+        { signature },
+        { withCredentials: true }
       );
     } catch (err) {
-      console.error("❌ Backend authentication failed:", err);
+      logger.error("Backend authentication failed:", err);
       throw new Error("Backend authentication failed");
     }
 
-    if (!res?.data?.token) {
-      console.error("❌ No token received from backend");
-      throw new Error("No token received from backend");
+    if (!res?.data?.address) {
+      logger.error("No address confirmed from backend");
+      throw new Error("Authentication failed - no address confirmed");
     }
 
-    // Step 8: Save to localStorage and create contract instance
-    localStorage.setItem("token", res.data.token);
+    // Save address to localStorage (tokens stored in HttpOnly cookies)
     localStorage.setItem("address", selectedAccount);
 
     const contractAddress = "0xfa211F6fdD59A1f920823E64271329D5848D3903";
     const contractInstance = new ethers.Contract(contractAddress, contractAbi, signer);
 
-    console.log("🎉 ========== CONNECTION SUCCESSFUL ==========");
+    logger.success("Connection successful");
     return { contractInstance, selectedAccount };
   } catch (error) {
-    console.error("❌ ========== CONNECTION FAILED ==========");
-    console.error("Error details:", error);
-    // Re-throw so caller (Wallet.jsx) can handle UI/toasts consistently
+    logger.error("Connection failed:", error);
     throw error;
   } finally {
     isConnecting = false;
-    console.log("🏁 Connection process ended");
+    logger.debug("Connection process ended");
   }
 };

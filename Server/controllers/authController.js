@@ -4,6 +4,9 @@ const jwt = require("jsonwebtoken");
 const { JWT_SECRETKEY } = require("../config/serverConfig");
 const { logger } = require("../utils/logger");
 
+// Load refresh token secret
+const JWT_REFRESH_SECRETKEY = process.env.JWT_REFRESH_SECRETKEY || JWT_SECRETKEY;
+
 async function authController(req, res, next) {
   try {
   const { signature } = req.body;
@@ -48,14 +51,22 @@ async function authController(req, res, next) {
           timestamp: new Date().toISOString()
         });
       }
-    const token = jwt.sign(
-      {
-          address,
-      },
+    // Generate access token (short-lived: 15 minutes)
+    const accessToken = jwt.sign(
+      { address },
       JWT_SECRETKEY,
-        { expiresIn: "1h" }
+      { expiresIn: "15m" }
     );
-      console.log("Generated Token: ", token);
+
+    // Generate refresh token (long-lived: 7 days)
+    const refreshToken = jwt.sign(
+      { address },
+      JWT_REFRESH_SECRETKEY,
+      { expiresIn: "7d" }
+    );
+
+    console.log("Generated Access Token (15min)");
+    console.log("Generated Refresh Token (7days)");
       
       // Security log for successful authentication
       logger.security('Authentication successful', {
@@ -63,9 +74,25 @@ async function authController(req, res, next) {
         timestamp: new Date().toISOString()
       });
       
-      return res
-        .status(200)
-        .json({ message: "Authentication Successful", token });
+      // Set HttpOnly cookies for both tokens
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000 // 15 minutes
+      });
+
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      return res.status(200).json({ 
+        message: "Authentication Successful",
+        address // Send address for client state management
+      });
     } else {
       // Security log for failed authentication
       logger.security('Authentication failed - address mismatch', {

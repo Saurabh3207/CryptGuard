@@ -9,6 +9,7 @@ import FileStatsCard from "../components/ui/FileStatsCard";
 import RecentUploadsCard from "../components/ui/RecentUploadsCard";
 import { motion } from "framer-motion";
 import { toast, Toaster } from "react-hot-toast";
+import logger from "../utils/logger";
 
 import {
   FaWallet,
@@ -39,27 +40,26 @@ const Home = () => {
   const shortenAddress = (addr) =>
     addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "";
 
-  // Check authentication - MUST check both token AND selectedAccount
+  /**
+   * Authentication check - verifies token and account match
+   */
   React.useEffect(() => {
     const token = localStorage.getItem("token");
     const address = localStorage.getItem("address");
     
-    // If no token in localStorage, redirect immediately
     if (!token || !address) {
-      console.log("No token or address in localStorage, redirecting to /");
+      logger.debug("No token or address in localStorage, redirecting to /");
       navigate("/", { replace: true });
       return;
     }
     
-    // If token exists but selectedAccount is not loaded yet, wait for it
-    // Set a timeout to prevent infinite waiting
+    // Wait for account to load with timeout fallback
     if (token && address && !selectedAccount) {
-      console.log("Token exists but account not loaded yet, waiting...");
+      logger.debug("Token exists but account not loaded yet, waiting");
       
-      // Timeout after 3 seconds - if account still not loaded, allow access anyway
       const timeout = setTimeout(() => {
         if (!selectedAccount) {
-          console.log("⚠️ Account not loaded after timeout, allowing access with localStorage data");
+          logger.warn("Account not loaded after timeout, allowing access with localStorage data");
           setAuthChecked(true);
         }
       }, 3000);
@@ -67,23 +67,24 @@ const Home = () => {
       return () => clearTimeout(timeout);
     }
     
-    // If token and address exist but don't match selectedAccount, redirect
+    // Verify token and address match
     if (selectedAccount && address.toLowerCase() !== selectedAccount.toLowerCase()) {
-      console.log("Address mismatch, redirecting to /");
+      logger.warn("Address mismatch, redirecting to /");
       localStorage.removeItem("token");
       localStorage.removeItem("address");
       navigate("/", { replace: true });
       return;
     }
     
-    // If we reach here, authentication is valid
     if (selectedAccount && token && address) {
-      console.log("✅ Authentication verified, account loaded:", selectedAccount);
+      logger.debug("Authentication verified, account loaded:", selectedAccount);
       setAuthChecked(true);
     }
-  }, [selectedAccount, navigate]); // Run when selectedAccount changes
+  }, [selectedAccount, navigate]);
 
-  // Listen for MetaMask account changes
+  /**
+   * MetaMask account change listener
+   */
   React.useEffect(() => {
     if (!window.ethereum || !selectedAccount) return;
 
@@ -91,15 +92,14 @@ const Home = () => {
       const storedAddress = localStorage.getItem("address");
       
       if (accounts.length === 0) {
-        // User disconnected MetaMask
-        console.log("MetaMask disconnected");
+        logger.debug("MetaMask disconnected");
         localStorage.removeItem("token");
         localStorage.removeItem("address");
         updateWeb3State({ selectedAccount: null, contractInstance: null });
         navigate("/", { replace: true });
       } else if (storedAddress && accounts[0].toLowerCase() !== storedAddress.toLowerCase()) {
         // Account switched in MetaMask
-        console.warn("⚠️ MetaMask account changed");
+        logger.warn("⚠️ MetaMask account changed");
         toast.error("🔒 Account changed. Please reconnect.");
         localStorage.removeItem("token");
         localStorage.removeItem("address");

@@ -8,6 +8,7 @@ import { useWeb3Context } from "../contexts/useWeb3Context";
 import { connectWallet } from "../utils/connectWallet";
 import { Toaster, toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import logger from "../utils/logger";
 
 const Wallet = () => {
   const navigateTo = useNavigate();
@@ -35,7 +36,7 @@ const Wallet = () => {
 
   /** ✅ Main connection handler */
   const handleWalletConnection = useCallback(async () => {
-    console.log("🔘 Connect Wallet Clicked");
+    logger.debug("🔘 Connect Wallet Clicked");
 
     if (loading) return;
     if (!metaMaskInstalled) {
@@ -122,9 +123,9 @@ const Wallet = () => {
         }
       );
 
-      console.log("🟢 Connected Account:", account);
+      logger.debug("🟢 Connected Account:", account);
     } catch (error) {
-      console.error("❌ Error connecting wallet:", error);
+      logger.error("❌ Error connecting wallet:", error);
       
       // Dismiss loading toast
       toast.dismiss(connectingToast);

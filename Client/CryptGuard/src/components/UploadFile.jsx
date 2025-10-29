@@ -2,6 +2,7 @@ import axios from "axios";
 import { useState, useRef } from "react";
 import { Toaster, toast } from "react-hot-toast";
 import { useWeb3Context } from "../contexts/useWeb3Context";
+import logger from "../utils/logger";
 
 const UploadFile = () => {
   const fileInputRef = useRef(null);
@@ -93,7 +94,7 @@ const UploadFile = () => {
       try {
         // Estimate gas before sending transaction
         const gasEstimate = await contractInstance.uploadFile.estimateGas(ipfsCID, fileHash);
-        console.log("⛽ Estimated gas:", gasEstimate.toString());
+        logger.debug("⛽ Estimated gas:", gasEstimate.toString());
         
         toast.loading("Waiting for blockchain confirmation...", { id: "metamask" });
         
@@ -102,13 +103,13 @@ const UploadFile = () => {
           gasLimit: (gasEstimate * 120n) / 100n // 20% buffer
         });
         
-        console.log("📝 Transaction sent:", tx.hash);
+        logger.debug("📝 Transaction sent:", tx.hash);
         toast.loading(`Transaction submitted: ${tx.hash.slice(0, 10)}...`, { id: "metamask" });
         
         // Wait for confirmation
         const receipt = await tx.wait(1); // Wait for 1 confirmation
         
-        console.log("✅ Transaction confirmed:", {
+        logger.debug("✅ Transaction confirmed:", {
           blockNumber: receipt.blockNumber,
           gasUsed: receipt.gasUsed.toString(),
           status: receipt.status
@@ -158,14 +159,14 @@ const UploadFile = () => {
         } else if (txError.message?.includes("insufficient funds")) {
           toast.error("❌ Insufficient funds for gas");
         } else {
-          console.error("Blockchain TX error:", txError);
+          logger.error("Blockchain TX error:", txError);
           toast.error("❌ Failed to record on blockchain: " + (txError.reason || txError.message));
         }
         return;
       }
 
     } catch (error) {
-      console.error("Upload failed:", error);
+      logger.error("Upload failed:", error);
       
       // Handle duplicate file error (409 Conflict)
       if (error.response && error.response.status === 409) {

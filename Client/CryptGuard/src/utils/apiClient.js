@@ -1,6 +1,9 @@
 // Client/CryptGuard/src/utils/apiClient.js - Centralized API client with error handling
 
 import axios from 'axios';
+import { generateSecureHeaders, validateToken, verifyResponseIntegrity } from './secureComm';
+import logger from './logger';
+import { toast } from 'react-hot-toast';
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
@@ -13,87 +16,176 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookies for cross-origin requests
 });
 
-// JWT token management
+// Token refresh state management
 let isRefreshing = false;
-let refreshSubscribers = [];
+let failedQueue = [];
 
-const onRefreshed = (token) => {
-  refreshSubscribers.map((callback) => callback(token));
-  refreshSubscribers = [];
-};
-
-const addRefreshSubscriber = (callback) => {
-  refreshSubscribers.push(callback);
-};
-
-// Request interceptor to add authentication token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
     }
-    
-    // Add request ID for tracking
-    config.headers['X-Request-ID'] = Date.now().toString();
-    
-    return config;
+  });
+  failedQueue = [];
+};
+
+// Request interceptor to add security headers (tokens handled by cookies)
+apiClient.interceptors.request.use(
+  async (config) => {
+    try {
+      // No need to manually add Authorization header - cookies do this automatically
+      
+      // Add request ID for tracking
+      config.headers['X-Request-ID'] = Date.now().toString();
+      
+      // Add secure headers (nonce, timestamp, checksum, signature) - conditionally based on flags
+      const secureHeaders = await generateSecureHeaders(
+        config.method.toUpperCase(),
+        config.url,
+        config.data
+      );
+      
+      // Merge secure headers with existing headers
+      config.headers = {
+        ...config.headers,
+        ...secureHeaders
+      };
+      
+      // Log request (dev mode only)
+      logger.debug('🔒 API request:', {
+        method: config.method,
+        url: config.url,
+        securityEnabled: Object.keys(secureHeaders).length > 0
+      });
+      
+      return config;
+    } catch (error) {
+      logger.error('Request interceptor error:', error);
+      return Promise.reject(error);
+    }
   },
   (error) => {
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling, auto-refresh, and integrity verification
 apiClient.interceptors.response.use(
-  (response) => {
+  async (response) => {
+    // Verify response integrity if checksum is present (only if feature enabled)
+    const checksum = response.headers['x-response-checksum'];
+    if (checksum && response.data) {
+      try {
+        const isValid = await verifyResponseIntegrity(response.data, checksum);
+        if (!isValid) {
+          logger.error('⚠️ Response integrity check failed');
+          return Promise.reject(new Error('Response integrity verification failed'));
+        }
+      } catch (error) {
+        logger.error('Error verifying response integrity:', error);
+      }
+    }
+    
     return response;
   },
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
     if (error.response) {
       // Server responded with error status
       const { status, data } = error.response;
       
-      if (status === 401) {
-        // Unauthorized - handle token expiration
-        const originalRequest = error.config;
-        
-        // Prevent infinite loops
-        if (originalRequest._retry) {
-          localStorage.removeItem('token');
-          window.location.href = '/wallet';
-          return Promise.reject(new Error('Session expired. Please log in again.'));
-        }
-        
+      if (status === 401 && !originalRequest._retry) {
+        // Unauthorized - try to refresh token
         originalRequest._retry = true;
         
-        // If not already refreshing, attempt to refresh token
-        if (!isRefreshing) {
-          isRefreshing = true;
+        if (isRefreshing) {
+          // Queue this request while refresh is in progress
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          }).then(() => {
+            return apiClient(originalRequest);
+          }).catch(err => {
+            return Promise.reject(err);
+          });
+        }
+        
+        isRefreshing = true;
+        
+        try {
+          // Attempt to refresh access token
+          logger.debug('Access token expired, attempting refresh...');
           
-          // For now, just clear and redirect (can implement refresh token later)
-          localStorage.removeItem('token');
+          // Show subtle loading toast
+          const toastId = toast.loading('🔄 Refreshing session...', {
+            duration: 2000,
+            style: {
+              background: '#667eea',
+              color: '#fff',
+              fontSize: '14px'
+            }
+          });
+          
+          await axios.post(`${API_BASE_URL}/refresh`, {}, { withCredentials: true });
+          logger.debug('Token refreshed successfully');
+          
+          // Show success toast
+          toast.success('✅ Session refreshed!', {
+            id: toastId,
+            duration: 2000,
+            style: {
+              background: '#10b981',
+              color: '#fff',
+              fontSize: '14px'
+            }
+          });
+          
+          processQueue(null);
+          isRefreshing = false;
+          
+          // Retry original request
+          return apiClient(originalRequest);
+          
+        } catch (refreshError) {
+          // Refresh failed - clear state and redirect to wallet
+          logger.error('Token refresh failed:', refreshError);
+          processQueue(refreshError, null);
+          isRefreshing = false;
+          
+          // Show error notification
+          toast.error('⏰ Session expired! Redirecting to wallet...', {
+            duration: 3000,
+            style: {
+              background: '#ef4444',
+              color: '#fff',
+              fontSize: '14px'
+            }
+          });
+          
+          localStorage.removeItem('address');
+          
+          // Redirect after a short delay
           setTimeout(() => {
             window.location.href = '/wallet';
-          }, 1000);
+          }, 1500);
           
           return Promise.reject(new Error('Session expired. Please reconnect your wallet.'));
         }
-        
-        // Queue requests while refreshing
-        return new Promise((resolve) => {
-          addRefreshSubscriber((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            resolve(apiClient(originalRequest));
-          });
-        });
       }
       
       if (status === 429) {
         // Rate limited
         return Promise.reject(new Error('Too many requests. Please wait before trying again.'));
+      }
+      
+      if (status === 403) {
+        // Forbidden - possible security violation
+        return Promise.reject(new Error(data?.message || 'Access denied'));
       }
       
       // Return the error message from server
