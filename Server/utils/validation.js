@@ -92,6 +92,10 @@ const fileSchemas = {
     walletAddress: ethereumAddress,
     limit: Joi.number().min(1).max(100).default(10),
     offset: Joi.number().min(0).default(0)
+  }),
+
+  deleteFile: Joi.object({
+    userAddress: ethereumAddress
   })
 };
 

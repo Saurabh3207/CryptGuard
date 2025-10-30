@@ -55,13 +55,11 @@ const FileCategoriesCard = () => {
     const fetchCategories = async () => {
       if (!selectedAccount) return;
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
+        // ✅ Tokens sent automatically via HttpOnly cookies
         const res = await axios.get(
           `http://localhost:3000/api/files/stats/${selectedAccount}`,
           {
-            headers: { Authorization: `Bearer ${token}` }
+            withCredentials: true // Enable cookies
           }
         );
         const fetchedCounts = res.data.categories;

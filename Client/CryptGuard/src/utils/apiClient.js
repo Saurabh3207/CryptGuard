@@ -239,6 +239,11 @@ export const api = {
       apiClient.post('/decrypt/file', { ipfsCID, userAddress }, {
         responseType: 'arraybuffer'
       }),
+    
+    deleteFile: (fileId, userAddress) =>
+      apiClient.delete(`/files/${fileId}`, {
+        data: { userAddress }
+      }),
   },
 
   // Health check

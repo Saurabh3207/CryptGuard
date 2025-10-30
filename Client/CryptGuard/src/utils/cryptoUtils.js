@@ -344,3 +344,141 @@ export class ValidationError extends Error {
     this.field = field;
   }
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * WALLET-BASED KEY DERIVATION (Priority 2 Security Enhancement)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 
+ * Derives encryption keys from MetaMask wallet signatures.
+ * No keys stored in database - wallet IS the key!
+ */
+
+// Standard message for key derivation (matches server-side)
+const KEY_DERIVATION_MESSAGE = 'CryptGuard Encryption Key Derivation v1.0';
+
+/**
+ * Get the message user must sign for key derivation
+ * @returns {string} Standard message
+ */
+export const getKeyDerivationMessage = () => {
+  return KEY_DERIVATION_MESSAGE;
+};
+
+/**
+ * Derive encryption key from wallet signature using PBKDF2
+ * 
+ * @param {string} signature - MetaMask signature (130 chars with 0x prefix)
+ * @param {string} userAddress - User's Ethereum address (used as salt)
+ * @returns {Promise<Uint8Array>} 32-byte encryption key
+ */
+export const deriveKeyFromSignature = async (signature, userAddress) => {
+  try {
+    if (!signature || !userAddress) {
+      throw new CryptoError('Signature and userAddress are required', 'MISSING_PARAMS');
+    }
+
+    // Normalize signature (remove 0x if present)
+    const normalizedSignature = signature.startsWith('0x') 
+      ? signature.slice(2) 
+      : signature;
+
+    // Convert signature to bytes
+    const signatureBytes = new Uint8Array(
+      normalizedSignature.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+    );
+
+    // Import signature as key material
+    const keyMaterial = await window.crypto.subtle.importKey(
+      'raw',
+      signatureBytes,
+      'PBKDF2',
+      false,
+      ['deriveBits', 'deriveKey']
+    );
+
+    // Use user address as salt
+    const encoder = new TextEncoder();
+    const salt = encoder.encode(userAddress.toLowerCase());
+
+    // Derive 32-byte key using PBKDF2 with 100k iterations
+    const derivedKey = await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: salt,
+        iterations: 100000,  // Match server-side
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      {
+        name: 'AES-GCM',
+        length: 256  // 256 bits = 32 bytes
+      },
+      true,  // extractable
+      ['encrypt', 'decrypt']
+    );
+
+    // Export as raw bytes
+    const exportedKey = await window.crypto.subtle.exportKey('raw', derivedKey);
+    return new Uint8Array(exportedKey);
+
+  } catch (error) {
+    throw new CryptoError(`Key derivation failed: ${error.message}`, 'DERIVATION_FAILED');
+  }
+};
+
+/**
+ * Request user to sign key derivation message with MetaMask
+ * 
+ * @param {object} signer - Ethers.js signer from MetaMask
+ * @param {string} userAddress - User's address
+ * @returns {Promise<{signature: string, key: Uint8Array}>}
+ */
+export const requestKeyDerivationSignature = async (signer, userAddress) => {
+  try {
+    if (!signer) {
+      throw new CryptoError('Signer not available. Connect wallet first.', 'NO_SIGNER');
+    }
+
+    // Request user to sign the standard message
+    const signature = await signer.signMessage(KEY_DERIVATION_MESSAGE);
+
+    // Derive key from signature
+    const key = await deriveKeyFromSignature(signature, userAddress);
+
+    return {
+      signature,
+      key,
+      keyHex: Array.from(key).map(b => b.toString(16).padStart(2, '0')).join('')
+    };
+
+  } catch (error) {
+    if (error.code === 4001) {
+      throw new CryptoError('User rejected signature request', 'USER_REJECTED');
+    }
+    throw new CryptoError(`Signature request failed: ${error.message}`, 'SIGNATURE_FAILED');
+  }
+};
+
+/**
+ * Convert key bytes to hex string (for server API calls)
+ * @param {Uint8Array} keyBytes - Key bytes
+ * @returns {string} Hex string
+ */
+export const keyBytesToHex = (keyBytes) => {
+  return Array.from(keyBytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+};
+
+/**
+ * Convert hex string to key bytes
+ * @param {string} hexKey - Hex string
+ * @returns {Uint8Array} Key bytes
+ */
+export const hexToKeyBytes = (hexKey) => {
+  const normalized = hexKey.startsWith('0x') ? hexKey.slice(2) : hexKey;
+  return new Uint8Array(
+    normalized.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+  );
+};

@@ -3,13 +3,15 @@ const FileMapping = require("../models/FileMapping");
 const { PINATA_JWT } = require("../config/serverConfig");
 const { generateEncryptionKey } = require("../utils/generateKey");
 const { encryptFile } = require("../utils/encryption");
+const { deriveKeyFromSignature } = require("../utils/keyDerivation");
+const { logger } = require("../utils/logger");
 const stream = require("stream");
 const axios = require("axios");
 const FormData = require("form-data");
 
 async function preUploadFileController(req, res) {
   try {
-    const { address, fileHash } = req.body;
+    const { address, fileHash, walletSignature } = req.body;
 
     if (!address || !fileHash || !req.file) {
       return res.status(400).json({ message: "Missing address, file, or file hash" });
@@ -17,7 +19,7 @@ async function preUploadFileController(req, res) {
 
     const userAddress = address.toLowerCase();
 
-    // ✅ Check if file already exists in DB
+    // Check if file already exists in DB
     const alreadyExists = await FileMapping.findOne({ userAddress, fileHash });
     if (alreadyExists) {
       return res.status(409).json({ message: "File already exists" }); 
@@ -29,13 +31,34 @@ async function preUploadFileController(req, res) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (!user.encryptionKey) {
-      const encryptionKey = generateEncryptionKey(32);
-      user.encryptionKey = encryptionKey;
-      await user.save();
+    let userKey;
+
+    // Priority 2: Wallet-Based Key Derivation (Preferred for new operations)
+    if (walletSignature) {
+      try {
+        userKey = deriveKeyFromSignature(walletSignature, userAddress);
+      } catch (error) {
+        logger.error('Wallet derivation failed', { error: error.message, userAddress });
+        return res.status(400).json({ 
+          message: "Invalid wallet signature for key derivation",
+          hint: "Please sign the key derivation message with MetaMask"
+        });
+      }
+    } 
+    // Priority 1: Master Key Encryption (Fallback for existing users)
+    else {
+      // Generate and encrypt user's encryption key if doesn't exist
+      if (!user.encryptionKey) {
+        const plainKey = generateEncryptionKey(32);
+        user.encryptionKeyPlain = plainKey;  // Uses virtual setter (encrypts automatically)
+        await user.save();
+      }
+
+      // Get decrypted key for file encryption
+      userKey = user.encryptionKeyPlain;  // Uses virtual getter (decrypts automatically)
     }
 
-    const { encryptedData, iv } = encryptFile(req.file.buffer, user.encryptionKey);
+    const { encryptedData, iv } = encryptFile(req.file.buffer, userKey);
 
     const fileStream = new stream.PassThrough();
     fileStream.end(encryptedData);
@@ -69,10 +92,8 @@ async function preUploadFileController(req, res) {
       if (!pinStatus.data.rows || pinStatus.data.rows.length === 0) {
         throw new Error('IPFS pinning verification failed');
       }
-      
-      console.log(`✅ IPFS file pinned successfully: ${ipfsCID}`);
     } catch (verifyError) {
-      console.error('⚠️ IPFS pinning verification warning:', verifyError.message);
+      logger.warn('IPFS pinning verification warning', { error: verifyError.message, ipfsCID });
       // Continue even if verification fails (file is still uploaded)
     }
 
@@ -111,7 +132,7 @@ async function preUploadFileController(req, res) {
     });
 
   } catch (error) {
-    console.error("Pre-upload Error:", error.message || error);
+    logger.error('Pre-upload error', { error: error.message, userAddress: req.body?.address });
     res.status(500).json({ message: "Internal server error" });
   }
 }

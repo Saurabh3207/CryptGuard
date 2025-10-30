@@ -42,20 +42,20 @@ const Home = () => {
 
   /**
    * Authentication check - verifies token and account match
+   * ✅ FIX: Tokens are stored in HttpOnly cookies, not localStorage
    */
   React.useEffect(() => {
-    const token = localStorage.getItem("token");
     const address = localStorage.getItem("address");
     
-    if (!token || !address) {
-      logger.debug("No token or address in localStorage, redirecting to /");
+    if (!address) {
+      logger.debug("No address in localStorage, redirecting to /");
       navigate("/", { replace: true });
       return;
     }
     
     // Wait for account to load with timeout fallback
-    if (token && address && !selectedAccount) {
-      logger.debug("Token exists but account not loaded yet, waiting");
+    if (address && !selectedAccount) {
+      logger.debug("Address exists but account not loaded yet, waiting");
       
       const timeout = setTimeout(() => {
         if (!selectedAccount) {
@@ -67,16 +67,16 @@ const Home = () => {
       return () => clearTimeout(timeout);
     }
     
-    // Verify token and address match
+    // Verify address matches selectedAccount
     if (selectedAccount && address.toLowerCase() !== selectedAccount.toLowerCase()) {
       logger.warn("Address mismatch, redirecting to /");
-      localStorage.removeItem("token");
       localStorage.removeItem("address");
       navigate("/", { replace: true });
       return;
     }
     
-    if (selectedAccount && token && address) {
+    // ✅ Authentication verified (tokens validated via HttpOnly cookies server-side)
+    if (selectedAccount && address) {
       logger.debug("Authentication verified, account loaded:", selectedAccount);
       setAuthChecked(true);
     }
@@ -93,7 +93,6 @@ const Home = () => {
       
       if (accounts.length === 0) {
         logger.debug("MetaMask disconnected");
-        localStorage.removeItem("token");
         localStorage.removeItem("address");
         updateWeb3State({ selectedAccount: null, contractInstance: null });
         navigate("/", { replace: true });
@@ -101,7 +100,6 @@ const Home = () => {
         // Account switched in MetaMask
         logger.warn("⚠️ MetaMask account changed");
         toast.error("🔒 Account changed. Please reconnect.");
-        localStorage.removeItem("token");
         localStorage.removeItem("address");
         updateWeb3State({ selectedAccount: null, contractInstance: null });
         navigate("/", { replace: true });
@@ -121,7 +119,6 @@ const Home = () => {
 
   const handleSignOut = () => {
     // Clear all authentication data
-    localStorage.removeItem("token");
     localStorage.removeItem("address");
     updateWeb3State({ selectedAccount: null, contractInstance: null });
     navigate("/");

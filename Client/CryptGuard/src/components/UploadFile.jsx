@@ -53,29 +53,56 @@ const UploadFile = () => {
       return;
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in to upload a file.");
-      return;
-    }
-
     try {
       setUploading(true);
       setProgress(0);
 
       const fileHash = await getFileHash(selectedFile);
+      
+      // Check if file already exists on blockchain
+      if (contractInstance) {
+        try {
+          const userFiles = await contractInstance.viewFiles();
+          const fileExists = userFiles.some(
+            f => f.fileHash.toLowerCase() === fileHash.toLowerCase()
+          );
+          
+          if (fileExists) {
+            toast.error(
+              "This file already exists in your vault!\n\n" +
+              "The blockchain detected that you've already uploaded this exact file. " +
+              "Each unique file can only be uploaded once.",
+              {
+                duration: 5000,
+                icon: "⚠️",
+                style: {
+                  maxWidth: "500px"
+                }
+              }
+            );
+            setUploading(false);
+            resetForm();
+            return;
+          }
+        } catch (checkError) {
+          // If check fails, continue with upload attempt
+          logger.warn("Could not check for duplicate file", checkError);
+        }
+      }
+
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("address", selectedAccount);
       formData.append("fileHash", fileHash);
 
       // Step 1: Upload file to IPFS and get CIDs
+      // ✅ Tokens sent automatically via HttpOnly cookies
       const preRes = await axios.post(
         "http://localhost:3000/api/preUpload",
         formData,
         {
+          withCredentials: true, // Enable cookies
           headers: {
-            Authorization: `Bearer ${token}`,
             "Content-Type": "multipart/form-data",
           },
           onUploadProgress: (progressEvent) => {
@@ -140,9 +167,7 @@ const UploadFile = () => {
             gasUsed: receipt.gasUsed.toString()
           },
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            withCredentials: true // Enable cookies
           }
         );
 
@@ -150,6 +175,32 @@ const UploadFile = () => {
         setProgress(100);
       } catch (txError) {
         toast.dismiss("metamask");
+
+        // Check if it's a "File already exists" error
+        if (txError.reason === "File already exists" || 
+            txError.message?.includes("File already exists") ||
+            (txError.code === "CALL_EXCEPTION" && txError.revert?.args?.[0] === "File already exists")) {
+          
+          toast.error(
+            "This file already exists on the blockchain!\n\n" +
+            "The smart contract detected that this exact file (based on its hash) has already been uploaded. " +
+            "Each unique file can only be uploaded once to prevent duplicates.",
+            {
+              duration: 6000,
+              icon: "⚠️",
+              style: {
+                maxWidth: "500px"
+              }
+            }
+          );
+          
+          logger.warn("Duplicate file upload attempt", { 
+            fileHash, 
+            fileName: selectedFile.name,
+            error: txError.reason 
+          });
+          return;
+        }
 
         // Handle EIP-1193 errors
         if (txError.code === 4001 || txError.message?.toLowerCase().includes("user denied")) {

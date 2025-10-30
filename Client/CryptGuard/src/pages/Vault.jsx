@@ -16,8 +16,9 @@ import { Toaster, toast } from "react-hot-toast";
 import Modal from "../components/ui/Modal";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import VerifyProgressModal from "../components/ui/VerifyProgressModal";
+import DeleteConfirmationModal from "../components/ui/DeleteConfirmationModal";
 import CryptoJS from "crypto-js";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const iconMap = {
   pdf: <FaFilePdf className="text-red-500" />,
@@ -58,6 +59,11 @@ const Vault = () => {
   const [verifySteps, setVerifySteps] = useState([]);
   const [verifyStatus, setVerifyStatus] = useState(null);
 
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const [deletingFileId, setDeletingFileId] = useState(null);
+
   // Image preview state
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewName, setPreviewName] = useState("");
@@ -66,16 +72,11 @@ const Vault = () => {
     if (!selectedAccount) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        toast.error("Please log in to view your files.");
-        return;
-      }
-      
+      // ✅ Tokens sent automatically via HttpOnly cookies
       const res = await axios.get(
         `http://localhost:3000/api/files/user/${selectedAccount}`,
         {
-          headers: { Authorization: `Bearer ${token}` }
+          withCredentials: true // Enable cookies
         }
       );
       setFiles(res.data.files || []);
@@ -133,7 +134,7 @@ const Vault = () => {
   const findFileIndexFromContract = async (fileHash) => {
     try {
       if (!contractInstance) {
-        console.warn("⚠️ Contract instance not available");
+        console.warn("Contract instance not available");
         return null;
       }
       
@@ -156,11 +157,9 @@ const Vault = () => {
   };
 
   const handleSecureDownload = async (file) => {
-    const token = localStorage.getItem("token");
-    if (!token) return toast.error("Please log in.");
-
     toast.loading("Decrypting file...");
     try {
+      // ✅ Tokens sent automatically via HttpOnly cookies
       const res = await axios.post(
         "http://localhost:3000/api/decryptAndDownload",
         {
@@ -170,7 +169,7 @@ const Vault = () => {
         },
         {
           responseType: "blob",
-          headers: { Authorization: `Bearer ${token}` },
+          withCredentials: true // Enable cookies
         }
       );
 
@@ -227,12 +226,10 @@ const Vault = () => {
     setVerifyStatus(null);
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Not authenticated");
-
       steps.push("🔍 Requesting decryption from server...");
       setVerifySteps([...steps]);
 
+      // ✅ Tokens sent automatically via HttpOnly cookies
       const response = await axios.post(
         "http://localhost:3000/api/decryptAndDownload",
         {
@@ -242,9 +239,7 @@ const Vault = () => {
         },
         {
           responseType: "blob",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          withCredentials: true // Enable cookies
         }
       );
 
@@ -298,6 +293,68 @@ const Vault = () => {
       setVerifySteps([]);
       setVerifyStatus(null);
     }, 3000);
+  };
+
+  const handleDeleteFile = (file) => {
+    // Open delete confirmation modal
+    setFileToDelete(file);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
+
+    // Close modal immediately
+    setDeleteModalOpen(false);
+    
+    // Set deleting state to trigger fade-out animation
+    setDeletingFileId(fileToDelete._id);
+    
+    toast.loading("Deleting file...");
+    
+    try {
+      const response = await axios.delete(
+        `http://localhost:3000/api/files/${fileToDelete._id}`,
+        {
+          data: { userAddress: selectedAccount },
+          withCredentials: true
+        }
+      );
+
+      toast.dismiss();
+      
+      // Wait for fade-out animation to complete before removing from list
+      setTimeout(async () => {
+        toast.success(`✅ ${fileToDelete.fileName} deleted successfully!`);
+        
+        // Refresh file list
+        await fetchFiles();
+        
+        // Reset states
+        setDeletingFileId(null);
+        setFileToDelete(null);
+        
+        // Close modal if it's open
+        if (modalOpen) {
+          setModalOpen(false);
+          setSelectedFile(null);
+        }
+      }, 500); // Match animation duration
+      
+    } catch (error) {
+      toast.dismiss();
+      setDeletingFileId(null);
+      setFileToDelete(null);
+      console.error("Delete error:", error);
+      
+      if (error.response?.status === 404) {
+        toast.error("❌ File not found or already deleted");
+      } else if (error.response?.status === 403) {
+        toast.error("❌ You don't have permission to delete this file");
+      } else {
+        toast.error("❌ Failed to delete file: " + (error.response?.data?.message || "Unknown error"));
+      }
+    }
   };
 
   // Calculate total pages
@@ -377,20 +434,36 @@ const Vault = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {paginateFiles(filteredFiles).map((file, index) => {
-            const fileType = getFileType(file.fileName);
-            const icon = iconMap[fileType];
-            const extLabel = getFileExtensionLabel(file.fileName);
+          <AnimatePresence mode="popLayout">
+            {paginateFiles(filteredFiles).map((file, index) => {
+              const fileType = getFileType(file.fileName);
+              const icon = iconMap[fileType];
+              const extLabel = getFileExtensionLabel(file.fileName);
+              const isDeleting = deletingFileId === file._id;
 
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                className="bg-white p-4 rounded-xl shadow-sm border hover:shadow-lg hover:ring-2 hover:ring-violet-100 hover:scale-[1.01] transition-all flex flex-col md:flex-row justify-between md:items-center gap-3"
-              >
-                <div className="flex items-center gap-3 truncate">
+              return (
+                <motion.div
+                  key={file._id || index}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ 
+                    opacity: isDeleting ? 0 : 1, 
+                    y: 0,
+                    scale: isDeleting ? 0.95 : 1,
+                    height: isDeleting ? 0 : "auto"
+                  }}
+                  exit={{ 
+                    opacity: 0, 
+                    scale: 0.95,
+                    height: 0,
+                    marginBottom: 0,
+                    transition: { duration: 0.3 }
+                  }}
+                  transition={{ duration: 0.3, delay: isDeleting ? 0 : index * 0.05 }}
+                  className="bg-white p-4 rounded-xl shadow-sm border hover:shadow-lg hover:ring-2 hover:ring-violet-100 hover:scale-[1.01] transition-all flex flex-col md:flex-row justify-between md:items-center gap-3 overflow-hidden"
+                  style={{ opacity: isDeleting ? 0.5 : 1 }}
+                >
+                  <div className="flex items-center gap-3 truncate">
                   <div className="text-xl">{icon}</div>
                   <div>
                     <p className="font-semibold text-gray-800 truncate flex items-center gap-2" title={file.fileName}>
@@ -409,10 +482,9 @@ const Vault = () => {
                   {fileType === "image" && (
                     <button
                       onClick={async () => {
-                        const token = localStorage.getItem("token");
-                        if (!token) return toast.error("Please log in.");
                         toast.loading("Decrypting image...");
                         try {
+                          // ✅ Tokens sent automatically via HttpOnly cookies
                           const res = await axios.post(
                             "http://localhost:3000/api/decryptAndDownload",
                             {
@@ -422,9 +494,7 @@ const Vault = () => {
                             },
                             {
                               responseType: "blob",
-                              headers: {
-                                Authorization: `Bearer ${token}`,
-                              },
+                              withCredentials: true // Enable cookies
                             }
                           );
                           toast.dismiss();
@@ -445,7 +515,8 @@ const Vault = () => {
                   {/* Verify Button */}
                   <button
                     onClick={() => verifyIntegrityOnly(file)}
-                    className="flex items-center gap-2 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 border border-violet-600 hover:border-violet-700 px-3 py-1.5 rounded-full transition-all duration-200 ease-in-out shadow-sm"
+                    disabled={isDeleting}
+                    className="flex items-center gap-2 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 border border-violet-600 hover:border-violet-700 px-3 py-1.5 rounded-full transition-all duration-200 ease-in-out shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <FaShieldAlt className="text-white" /> Verify
                   </button>
@@ -453,14 +524,37 @@ const Vault = () => {
                   {/* Download Button */}
                   <button
                     onClick={() => handleSecureDownload(file)}
-                    className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 border border-indigo-600 hover:border-violet-700 px-3 py-1.5 rounded-full transition-all duration-200 ease-in-out shadow-sm"
+                    disabled={isDeleting}
+                    className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 border border-indigo-600 hover:border-violet-700 px-3 py-1.5 rounded-full transition-all duration-200 ease-in-out shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <FaDownload className="text-white" /> Download
+                  </button>
+
+                  {/* Delete Button */}
+                  <button
+                    onClick={() => handleDeleteFile(file)}
+                    disabled={isDeleting}
+                    className="flex items-center gap-2 text-xs font-medium text-white bg-red-500 hover:bg-red-600 border border-red-500 hover:border-red-600 px-3 py-1.5 rounded-full transition-all duration-200 ease-in-out shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-trash-alt"></i> Delete
+                      </>
+                    )}
                   </button>
                 </div>
               </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
       )}
 
@@ -516,6 +610,16 @@ const Vault = () => {
           setVerifySteps([]);
           setVerifyStatus(null);
         }}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setFileToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        fileName={fileToDelete?.fileName || ""}
       />
 
       {modalOpen && (

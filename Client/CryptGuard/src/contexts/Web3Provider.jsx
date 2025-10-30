@@ -13,10 +13,11 @@ const Web3Provider = ({children}) => {
   // Auto-reconnect wallet on refresh
   React.useEffect(() => {
     const address = localStorage.getItem("address");
-    const token = localStorage.getItem("token");
+    // ✅ FIX: Tokens are stored in HttpOnly cookies, not localStorage
+    // Just check for address and MetaMask availability
     
     async function checkMetaMask() {
-      const hasRequirements = window.ethereum && address && token;
+      const hasRequirements = window.ethereum && address;
       
       if (!hasRequirements) {
         return;
@@ -44,13 +45,11 @@ const Web3Provider = ({children}) => {
         } else {
           logger.warn("Web3Provider: Account mismatch, clearing state");
           localStorage.removeItem("address");
-          localStorage.removeItem("token");
           setWeb3State({ contractInstance: null, selectedAccount: null });
         }
       } catch (err) {
         logger.error("Web3Provider: Auto-reconnect failed:", err.message);
         localStorage.removeItem("address");
-        localStorage.removeItem("token");
         setWeb3State({ contractInstance: null, selectedAccount: null });
       }
     }

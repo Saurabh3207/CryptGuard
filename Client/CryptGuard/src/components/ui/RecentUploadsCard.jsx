@@ -33,13 +33,11 @@ const RecentUploadsCard = () => {
     const fetchFiles = async () => {
       if (!selectedAccount) return;
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
+        // ✅ Tokens sent automatically via HttpOnly cookies
         const res = await axios.get(
           `http://localhost:3000/api/files/user/${selectedAccount}`,
           {
-            headers: { Authorization: `Bearer ${token}` }
+            withCredentials: true // Enable cookies
           }
         );
         const fetchedFiles = res.data.files.map((file) => {
@@ -80,16 +78,11 @@ const RecentUploadsCard = () => {
   };
 
   const handleSecureDownload = async (file, index) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in.");
-      return;
-    }
-
     setDownloadingIndex(index);
     toast.loading("Decrypting file...");
 
     try {
+      // ✅ Tokens sent automatically via HttpOnly cookies
       const res = await axios.post(
         "http://localhost:3000/api/decryptAndDownload",
         {
@@ -99,9 +92,7 @@ const RecentUploadsCard = () => {
         },
         {
           responseType: "blob",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          withCredentials: true // Enable cookies
         }
       );
 

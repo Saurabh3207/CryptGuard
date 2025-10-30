@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { sanitizeInputs, validateContentType, validateBodySize } = require('./middleware/validation');
 const { enhancedSecurityHeaders, preventReplayAttack } = require('./middleware/securityMiddleware');
+const { logger } = require('./utils/logger');
 const config = require('./config/serverConfig');
 const { MONGODB_URL, PORT } = config;
 const { connectDB } = require('./db/connect');
@@ -15,6 +16,7 @@ const fileRoute = require('./routes/fileRoute');
 const decryptRoute = require('./routes/decryptRoute');
 const refreshTokenRoute = require('./routes/refreshTokenRoute');
 const logoutRoute = require('./routes/logoutRoute');
+const deleteFileRoute = require('./routes/deleteFileRoute');
 
 // Security headers (helmet provides basic protection)
 app.use(helmet({
@@ -115,26 +117,30 @@ app.use('/api', logoutRoute);        // Logout endpoint
 app.use('/api', uploadFileRoute);
 app.use('/api', fileRoute);
 app.use('/api', decryptRoute);
+app.use('/api', deleteFileRoute);    // File deletion endpoint
 
-// Log security configuration on startup
-console.log('🔒 Security Configuration:');
-console.log('  - Replay Protection:', config.ENABLE_REPLAY_PROTECTION ? '✅ ENABLED' : '⚠️  DISABLED');
-console.log('  - Request Signing:', config.ENABLE_REQUEST_SIGNING ? '✅ ENABLED' : '⚠️  DISABLED');
-console.log('  - Content Integrity:', config.ENABLE_CONTENT_INTEGRITY ? '✅ ENABLED' : '⚠️  DISABLED');
-
+// Start server
 async function serverStart() {
     try {
+        // Validate security configuration
+        config.validateSecrets();
+        
+        // Verify key encryption system
+        const { verifyKeyEncryption } = require('./utils/keyEncryption');
+        verifyKeyEncryption();
+        
         await connectDB(MONGODB_URL);
-        console.log('Connected to the database');
+        
         app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
+            logger.info(`Server running on port ${PORT}`);
+            logger.security('Master key encryption active', { timestamp: new Date().toISOString() });
         });
     } catch (error) {
-        console.log(error);
+        logger.error('Server startup failed', { error: error.message });
+        process.exit(1);
     }
 }
 
-// function to start the server
 serverStart();
 
  

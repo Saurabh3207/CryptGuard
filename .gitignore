@@ -17,6 +17,10 @@ APPLICATION_STATE_AND_IMPROVEMENTS.md
 SECURITY_IMPLEMENTATION_CHECKLIST.md
 TOAST_NOTIFICATIONS_GUIDE.md
 XSS_SECURITY_ANALYSIS.md
+ENCRYPTION_KEY_SECURITY_ANALYSIS.md
+MASTER_KEY_SETUP_GUIDE.md
+MASTER_KEY_IMPLEMENTATION_SUMMARY.md
+IMPLEMENTATION_COMPLETE.md
 
 # Logs
 logs/
@@ -31,6 +35,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.backup.*
 
 # Dependencies
 node_modules/

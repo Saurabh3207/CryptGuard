@@ -23,7 +23,6 @@ async function authController(req, res, next) {
     // Recover the address from the signature
     // UPDATED: ethers v6 syntax (removed .utils)
     const recoveredAddress = ethers.verifyMessage(message, signature);
-    console.log("Recovered Address: ", recoveredAddress);
 
     // Compare the recovered address with the address sent from frontend
     if (address.toLowerCase() === recoveredAddress.toLowerCase()) {
@@ -31,8 +30,7 @@ async function authController(req, res, next) {
       const user = await UserModel.findOne({ userAddress: address });
 
     if (!user) {
-        const userData = await UserModel.create({ userAddress: address, loginCount: 1 });
-        console.log("User Created: ", userData);
+        await UserModel.create({ userAddress: address, loginCount: 1 });
         
         // Audit log for new user registration
         logger.audit('USER_REGISTRATION', {
@@ -64,9 +62,6 @@ async function authController(req, res, next) {
       JWT_REFRESH_SECRETKEY,
       { expiresIn: "7d" }
     );
-
-    console.log("Generated Access Token (15min)");
-    console.log("Generated Refresh Token (7days)");
       
       // Security log for successful authentication
       logger.security('Authentication successful', {
@@ -78,14 +73,14 @@ async function authController(req, res, next) {
       res.cookie('accessToken', accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-        sameSite: 'strict',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax for dev, strict for prod
         maxAge: 15 * 60 * 1000 // 15 minutes
       });
 
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax for dev, strict for prod
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -105,7 +100,7 @@ async function authController(req, res, next) {
     }
   } catch (error) {
     // Enhanced error handling with specific error types
-    console.error("Authentication error:", error);
+    logger.error('Authentication error', { error: error.message });
     
     if (error.code === 'INVALID_ARGUMENT') {
       return res.status(400).json({ message: "Invalid signature format" });

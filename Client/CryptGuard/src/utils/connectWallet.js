@@ -358,8 +358,9 @@ export const connectWallet = async () => {
       throw new Error("Authentication failed - no address confirmed");
     }
 
-    // Save address to localStorage (tokens stored in HttpOnly cookies)
+    // Save address to localStorage (JWT tokens stored in HttpOnly cookies automatically)
     localStorage.setItem("address", selectedAccount);
+    logger.debug("Address saved to localStorage, tokens stored in secure HttpOnly cookies");
 
     const contractAddress = "0xfa211F6fdD59A1f920823E64271329D5848D3903";
     const contractInstance = new ethers.Contract(contractAddress, contractAbi, signer);
