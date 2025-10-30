@@ -23,6 +23,7 @@ MASTER_KEY_IMPLEMENTATION_SUMMARY.md
 IMPLEMENTATION_COMPLETE.md
 cleanup-production.md
 CONTRIBUTING.md
+.github/copilot-instructions.md
 
 # Logs
 logs/
