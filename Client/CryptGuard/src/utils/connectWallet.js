@@ -362,7 +362,10 @@ export const connectWallet = async () => {
     localStorage.setItem("address", selectedAccount);
     logger.debug("Address saved to localStorage, tokens stored in secure HttpOnly cookies");
 
-    const contractAddress = "0xfa211F6fdD59A1f920823E64271329D5848D3903";
+    const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+    if (!contractAddress) {
+      throw new Error("Contract address not configured. Please set VITE_CONTRACT_ADDRESS in environment variables.");
+    }
     const contractInstance = new ethers.Contract(contractAddress, contractAbi, signer);
 
     logger.success("Connection successful");

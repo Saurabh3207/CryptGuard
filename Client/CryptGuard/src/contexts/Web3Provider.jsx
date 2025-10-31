@@ -37,7 +37,10 @@ const Web3Provider = ({children}) => {
           const signer = await provider.getSigner(address);
           const signerAddress = await signer.getAddress();
           
-          const contractAddress = "0xfa211F6fdD59A1f920823E64271329D5848D3903";
+          const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+          if (!contractAddress) {
+            throw new Error("Contract address not configured. Please set VITE_CONTRACT_ADDRESS in environment variables.");
+          }
           const contractInstance = new ethers.Contract(contractAddress, contractAbi, signer);
           
           setWeb3State({ contractInstance, selectedAccount: address });
