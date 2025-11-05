@@ -7,6 +7,8 @@ import FileCategoriesCard from "../components/ui/FileCategoriesCard";
 import DateTimeCard from "../components/ui/DateTimeCard";
 import FileStatsCard from "../components/ui/FileStatsCard";
 import RecentUploadsCard from "../components/ui/RecentUploadsCard";
+import SessionStatusIndicator from "../components/ui/SessionStatusIndicator";
+import { useSessionTimer } from "../hooks/useSessionTimer";
 import { motion } from "framer-motion";
 import { toast, Toaster } from "react-hot-toast";
 import logger from "../utils/logger";
@@ -28,6 +30,13 @@ const Home = () => {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   const [authChecked, setAuthChecked] = React.useState(false);
+
+  // Session timer for status indicator
+  const isAuthenticated = !!selectedAccount;
+  const {
+    formatTimeRemaining,
+    getSessionStatusColor,
+  } = useSessionTimer(isAuthenticated);
 
   React.useEffect(() => {
     const handleResize = () => {
@@ -222,6 +231,13 @@ const Home = () => {
             👋 Welcome back
           </div>
           <div className="ml-auto flex items-center gap-4">
+            {/* Session Status Indicator */}
+            <SessionStatusIndicator
+              timeRemaining={0}
+              statusColor={getSessionStatusColor()}
+              formatTime={formatTimeRemaining}
+            />
+            
             <div className="flex items-center gap-2 bg-violet-100 px-3 py-1.5 rounded-lg border border-violet-200 shadow-sm">
               <FaWallet className="text-violet-600" />
               <span className="text-sm font-medium text-violet-700">

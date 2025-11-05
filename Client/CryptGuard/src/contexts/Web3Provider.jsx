@@ -1,14 +1,25 @@
 import React, { useState } from "react";
 import { Web3Context } from "./createWeb3Context";
 import logger from "../utils/logger";
+import { useSessionTimer } from "../hooks/useSessionTimer";
+import SessionExpiryWarning from "../components/ui/SessionExpiryWarning";
 
 const Web3Provider = ({children}) => {
-
 
   const [web3State, setWeb3State] = useState({
     contractInstance: null,
     selectedAccount: null,
   });
+
+  // Integrate session timer
+  const isAuthenticated = !!web3State.selectedAccount;
+  const {
+    showWarning,
+    extendSession,
+    endSession,
+    recordActivity,
+    formatTimeRemaining,
+  } = useSessionTimer(isAuthenticated);
 
   // Auto-reconnect wallet on refresh
   React.useEffect(() => {
@@ -109,11 +120,46 @@ const Web3Provider = ({children}) => {
       ...prevState,
       ...newState,
     }));
+    
+    // Record activity when state updates (user interaction)
+    if (isAuthenticated) {
+      recordActivity();
+    }
   };
+
+  // Record activity on user interactions
+  React.useEffect(() => {
+    const handleUserActivity = () => {
+      if (isAuthenticated) {
+        recordActivity();
+      }
+    };
+
+    // Listen to user activity events
+    window.addEventListener('click', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+    window.addEventListener('scroll', handleUserActivity);
+    window.addEventListener('mousemove', handleUserActivity);
+
+    return () => {
+      window.removeEventListener('click', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+      window.removeEventListener('mousemove', handleUserActivity);
+    };
+  }, [isAuthenticated, recordActivity]);
 
   return (
     <Web3Context.Provider value={{ web3State, updateWeb3State }}>
       {children}
+      
+      {/* Session Expiry Warning Modal */}
+      <SessionExpiryWarning
+        isOpen={showWarning}
+        onExtend={extendSession}
+        onLogout={endSession}
+        timeRemaining={formatTimeRemaining()}
+      />
     </Web3Context.Provider>
   );
 }
